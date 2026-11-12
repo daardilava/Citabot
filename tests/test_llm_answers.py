@@ -34,7 +34,9 @@ class FakeClient:
         if self._error is not None:
             raise self._error
         text = self._reply if isinstance(self._reply, str) else json.dumps(self._reply)
-        return SimpleNamespace(stop_reason=self._stop_reason, content=[SimpleNamespace(type="text", text=text)])
+        return SimpleNamespace(
+            stop_reason=self._stop_reason, content=[SimpleNamespace(type="text", text=text)]
+        )
 
     @property
     def prompt(self) -> str:

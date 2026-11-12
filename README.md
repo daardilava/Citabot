@@ -1,5 +1,9 @@
 # Citabot
 
+[![CI](https://github.com/daardilava/Citabot/actions/workflows/ci.yml/badge.svg)](https://github.com/daardilava/Citabot/actions/workflows/ci.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Sin dependencias](https://img.shields.io/badge/dependencias-ninguna-brightgreen)
+
 Agente de citas y preguntas frecuentes por WhatsApp para pymes. MVP navegable que corre en tu equipo, con una clínica dental como negocio de demostración.
 
 El cliente escribe por WhatsApp, el agente agenda, responde con la base de conocimiento del negocio y pasa el chat a una persona cuando no sabe. El equipo ve todo en un panel web.
@@ -85,7 +89,9 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 python -m unittest discover -s tests -t .
 ```
 
-51 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. Opcional, si los tienes instalados: `ruff check .` y `mypy`.
+51 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. 
+
+La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff` y `mypy --strict`. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
 ## Entender los mensajes con un LLM
 

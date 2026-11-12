@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "citabot"
 version = "0.1.0"
@@ -6,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = []  # standard library only
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy"]
+dev = ["ruff==0.17.5", "mypy==2.4.1", "pre-commit"]
 llm = ["anthropic"]  # only needed with NLU_PROVIDER=llm
 
 [tool.setuptools.packages.find]

@@ -89,4 +89,7 @@ def build_user_message(question: str, passages: Sequence[Passage]) -> str:
     fragments = "\n".join(
         f'<fragmento titulo="{passage.title}">\n{passage.text}\n</fragmento>' for passage in passages
     )
-    return f"<fragmentos>\n{fragments}\n</fragmentos>\n\nPregunta del cliente:\n<pregunta>\n{question}\n</pregunta>"
+    return (
+        f"<fragmentos>\n{fragments}\n</fragmentos>\n\n"
+        f"Pregunta del cliente:\n<pregunta>\n{question}\n</pregunta>"
+    )
