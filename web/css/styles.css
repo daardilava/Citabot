@@ -1,37 +1,150 @@
-/* Citabot panel. Plain CSS, system fonts, no build step. */
+/* Citabot panel. Plain CSS, system fonts, no build step.
+
+   Every colour is a token. The light values are the defaults; the dark ones
+   apply when the system asks for dark (unless the page is pinned to light)
+   or when theme.js pins the page to dark. */
 
 :root {
+  color-scheme: light;
   --paper: #f5f3ee;
   --surface: #ffffff;
+  --surface-hover: #fbfaf7;
+  --surface-muted: #faf9f6;
+  --tint: #ece8df;
   --ink: #17231d;
   --ink-soft: #5c6a63;
+  --ink-faint: #a39f94;
   --line: #e3dfd6;
+  --line-strong: #c9c3b6;
+  --input-line: #d5d0c5;
   --pine: #10261d;
   --pine-soft: #1c3a2d;
   --green: #17875c;
+  --green-hover: #0f6b47;
   --green-strong: #0f6b47;
   --green-tint: #e3f3ea;
+  --green-line: #cbe7d8;
+  --green-wash: #f4fbf7;
   --amber: #b45f06;
   --amber-tint: #fdf0dc;
+  --amber-line: #f1d3a2;
   --red: #b3372b;
   --red-tint: #fbe9e6;
+  --danger: #b3372b;
+  --danger-hover: #962d23;
   --blue: #2c5f8a;
   --blue-tint: #e6eff7;
+  --blue-line: #cfe0ee;
+  --blue-wash: #f5f9fc;
   --chat-bg: #ece6dc;
-  --radius: 14px;
+  --chat-in: #ffffff;
+  --chat-out: #d6f5cf;
+  --chat-meta: #8a9690;
+  --chat-note: rgb(255 255 255 / 70%);
+  --chip-line: #b9d8ca;
+  --bezel: #17231d;
+  --header-bg: rgb(245 243 238 / 88%);
   --shadow: 0 1px 2px rgb(23 35 29 / 6%), 0 8px 24px -12px rgb(23 35 29 / 18%);
+  --shadow-lift: rgb(23 35 29 / 40%);
+  --radius: 14px;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI Semibold", var(--font);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0f1613;
+    --surface: #172019;
+    --surface-hover: #1c2620;
+    --surface-muted: #141c17;
+    --tint: #131c17;
+    --ink: #e6ede9;
+    --ink-soft: #9aaba2;
+    --ink-faint: #7f8e86;
+    --line: #26332c;
+    --line-strong: #3a4a41;
+    --input-line: #33433a;
+    --pine: #0a120e;
+    --pine-soft: #15241c;
+    --green: #17875c;
+    --green-hover: #136f4c;
+    --green-strong: #5fd0a0;
+    --green-tint: rgb(70 194 141 / 14%);
+    --green-line: rgb(70 194 141 / 30%);
+    --green-wash: rgb(70 194 141 / 8%);
+    --amber: #f0b45e;
+    --amber-tint: rgb(240 162 58 / 14%);
+    --amber-line: rgb(240 162 58 / 32%);
+    --red: #f08a7e;
+    --red-tint: rgb(240 110 95 / 14%);
+    --danger: #c2463a;
+    --danger-hover: #a63a30;
+    --blue: #8fbce6;
+    --blue-tint: rgb(110 160 220 / 14%);
+    --blue-line: rgb(110 160 220 / 30%);
+    --blue-wash: rgb(110 160 220 / 8%);
+    --chat-bg: #0d1511;
+    --chat-in: #1d2822;
+    --chat-out: #1f4a35;
+    --chat-meta: #8fa198;
+    --chat-note: rgb(255 255 255 / 8%);
+    --chip-line: #2f5a46;
+    --bezel: #000000;
+    --header-bg: rgb(15 22 19 / 85%);
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -12px rgb(0 0 0 / 60%);
+    --shadow-lift: rgb(0 0 0 / 70%);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0f1613;
+  --surface: #172019;
+  --surface-hover: #1c2620;
+  --surface-muted: #141c17;
+  --tint: #131c17;
+  --ink: #e6ede9;
+  --ink-soft: #9aaba2;
+  --ink-faint: #7f8e86;
+  --line: #26332c;
+  --line-strong: #3a4a41;
+  --input-line: #33433a;
+  --pine: #0a120e;
+  --pine-soft: #15241c;
+  --green: #17875c;
+  --green-hover: #136f4c;
+  --green-strong: #5fd0a0;
+  --green-tint: rgb(70 194 141 / 14%);
+  --green-line: rgb(70 194 141 / 30%);
+  --green-wash: rgb(70 194 141 / 8%);
+  --amber: #f0b45e;
+  --amber-tint: rgb(240 162 58 / 14%);
+  --amber-line: rgb(240 162 58 / 32%);
+  --red: #f08a7e;
+  --red-tint: rgb(240 110 95 / 14%);
+  --danger: #c2463a;
+  --danger-hover: #a63a30;
+  --blue: #8fbce6;
+  --blue-tint: rgb(110 160 220 / 14%);
+  --blue-line: rgb(110 160 220 / 30%);
+  --blue-wash: rgb(110 160 220 / 8%);
+  --chat-bg: #0d1511;
+  --chat-in: #1d2822;
+  --chat-out: #1f4a35;
+  --chat-meta: #8fa198;
+  --chat-note: rgb(255 255 255 / 8%);
+  --chip-line: #2f5a46;
+  --bezel: #000000;
+  --header-bg: rgb(15 22 19 / 85%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -12px rgb(0 0 0 / 60%);
+  --shadow-lift: rgb(0 0 0 / 70%);
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-}
-
-html {
-  color-scheme: light;
 }
 
 body {
@@ -112,6 +225,60 @@ textarea {
   background: var(--surface);
   padding: 8px 12px;
   border-radius: 8px;
+}
+
+/* ------------------------------------------------------------ theme switch */
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  flex: none;
+}
+
+.theme-toggle:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.theme-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Show the icon of the theme a click switches to. */
+.theme-toggle .icon-sun,
+:root[data-theme="dark"] .theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  display: block;
+}
+
+/* In the panel the switch sits on the always-dark sidebar. */
+.account .theme-toggle {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: #c9d8d0;
+}
+
+.account .theme-toggle:hover {
+  background: var(--pine-soft);
+  color: #fff;
 }
 
 /* ------------------------------------------------------------ shell */
@@ -384,8 +551,8 @@ textarea {
 }
 
 .btn:hover {
-  border-color: #c9c3b6;
-  background: #fbfaf7;
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
 }
 
 .btn:disabled {
@@ -400,19 +567,19 @@ textarea {
 }
 
 .btn-primary:hover {
-  background: var(--green-strong);
-  border-color: var(--green-strong);
+  background: var(--green-hover);
+  border-color: var(--green-hover);
 }
 
 .btn-danger {
-  background: var(--red);
-  border-color: var(--red);
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
 }
 
 .btn-danger:hover {
-  background: #962d23;
-  border-color: #962d23;
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 .btn-small {
@@ -566,9 +733,9 @@ select,
 textarea {
   width: 100%;
   padding: 9px 11px;
-  border: 1px solid #d5d0c5;
+  border: 1px solid var(--input-line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
 }
 
 textarea {
@@ -605,7 +772,7 @@ textarea:focus-visible {
 }
 
 .stat:hover {
-  border-color: #c9c3b6;
+  border-color: var(--line-strong);
 }
 
 .stat-label {
@@ -627,7 +794,7 @@ textarea:focus-visible {
 
 .stat-alert {
   background: var(--amber-tint);
-  border-color: #f1d3a2;
+  border-color: var(--amber-line);
 }
 
 .stat-alert .stat-value,
@@ -719,7 +886,7 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(120deg, #fff 55%, var(--green-tint));
+  background: linear-gradient(120deg, var(--surface) 55%, var(--green-tint));
 }
 
 .cta h2 {
@@ -883,13 +1050,13 @@ textarea:focus-visible {
 .bubble-bot {
   align-self: flex-end;
   background: var(--green-tint);
-  border-color: #cbe7d8;
+  border-color: var(--green-line);
 }
 
 .bubble-agent {
   align-self: flex-end;
   background: var(--blue-tint);
-  border-color: #cfe0ee;
+  border-color: var(--blue-line);
 }
 
 .bubble-options {
@@ -901,7 +1068,7 @@ textarea:focus-visible {
 
 .bubble-options span {
   padding: 2px 9px;
-  border: 1px solid rgb(15 107 71 / 30%);
+  border: 1px solid var(--green-line);
   border-radius: 999px;
   font-size: 12.5px;
   color: var(--green-strong);
@@ -964,7 +1131,7 @@ textarea:focus-visible {
 }
 
 .day-empty {
-  color: #a39f94;
+  color: var(--ink-faint);
   font-size: 13px;
 }
 
@@ -973,9 +1140,9 @@ textarea:focus-visible {
   gap: 2px;
   padding: 9px 10px;
   border-radius: 10px;
-  border: 1px solid #cbe7d8;
+  border: 1px solid var(--green-line);
   border-left: 4px solid var(--green);
-  background: #f4fbf7;
+  background: var(--green-wash);
   min-width: 0;
 }
 
@@ -998,15 +1165,15 @@ textarea:focus-visible {
 }
 
 .appt-completed {
-  border-color: #cfe0ee;
+  border-color: var(--blue-line);
   border-left-color: var(--blue);
-  background: #f5f9fc;
+  background: var(--blue-wash);
 }
 
 .appt-cancelled {
   border-color: var(--line);
-  border-left-color: #c9c3b6;
-  background: #faf9f6;
+  border-left-color: var(--line-strong);
+  background: var(--surface-muted);
   color: var(--ink-soft);
 }
 
@@ -1054,7 +1221,7 @@ textarea:focus-visible {
 
 .result-win {
   border-color: var(--green);
-  background: #f4fbf7;
+  background: var(--green-wash);
 }
 
 .meter {
@@ -1166,7 +1333,7 @@ textarea:focus-visible {
 }
 
 .persona:hover {
-  border-color: #c9c3b6;
+  border-color: var(--line-strong);
 }
 
 .persona.selected {
@@ -1200,11 +1367,11 @@ textarea:focus-visible {
   flex-direction: column;
   height: min(690px, calc(100vh - 150px));
   min-height: 460px;
-  border: 9px solid #17231d;
+  border: 9px solid var(--bezel);
   border-radius: 38px;
   background: var(--chat-bg);
   overflow: hidden;
-  box-shadow: 0 30px 60px -30px rgb(23 35 29 / 55%);
+  box-shadow: 0 30px 60px -30px var(--shadow-lift);
 }
 
 .phone-head {
@@ -1239,7 +1406,7 @@ textarea:focus-visible {
   margin: auto;
   padding: 8px 14px;
   border-radius: 10px;
-  background: rgb(255 255 255 / 70%);
+  background: var(--chat-note);
   color: var(--ink-soft);
   font-size: 13px;
   text-align: center;
@@ -1249,7 +1416,7 @@ textarea:focus-visible {
   max-width: 84%;
   padding: 7px 10px 4px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--chat-in);
   box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
   font-size: 14.5px;
   align-self: flex-start;
@@ -1258,14 +1425,14 @@ textarea:focus-visible {
 
 .msg small {
   display: block;
-  color: #8a9690;
+  color: var(--chat-meta);
   font-size: 11px;
   text-align: right;
 }
 
 .msg-out {
   align-self: flex-end;
-  background: #d6f5cf;
+  background: var(--chat-out);
   border-radius: 12px;
   border-top-right-radius: 4px;
 }
@@ -1289,9 +1456,9 @@ textarea:focus-visible {
 
 .phone-quick button {
   padding: 6px 12px;
-  border: 1px solid #b9d8ca;
+  border: 1px solid var(--chip-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--surface);
   color: var(--green-strong);
   font-weight: 600;
   font-size: 13.5px;
@@ -1349,7 +1516,8 @@ textarea:focus-visible {
   padding: 0;
   border: 0;
   border-radius: 16px;
-  box-shadow: 0 30px 80px -20px rgb(23 35 29 / 50%);
+  box-shadow: 0 30px 80px -20px var(--shadow-lift);
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -1388,6 +1556,7 @@ textarea:focus-visible {
 .toast {
   max-width: 360px;
   padding: 11px 15px;
+  border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 12px;
   background: var(--pine);
   color: #fff;
@@ -1396,7 +1565,7 @@ textarea:focus-visible {
 }
 
 .toast-error {
-  background: var(--red);
+  background: var(--danger);
 }
 
 .toast-out {
