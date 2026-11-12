@@ -8,6 +8,9 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ### Añadido
 
+- Modo oscuro en todas las páginas. Sigue la preferencia del sistema hasta que eliges uno con el
+  botón de sol/luna, y la elección se recuerda en ese navegador.
+
 - Sitio público: página de inicio, precios, registro, inicio de sesión y página 404, con URLs
   limpias (`/precios`, `/login`, `/registro`). El panel pasa a `/app`.
 - Cuentas: cada registro crea un negocio propio y vacío. El panel exige sesión y cada negocio solo

@@ -91,6 +91,7 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 | **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. `tenant()` en `api.py` lo toma de la sesión, así que ninguna ruta del panel responde sin sesión ni alcanza datos de otro negocio. |
 | **Sin dependencias externas** | Arranca con `python run.py` en cualquier equipo. El costo: un mini-router propio en `framework.py` en vez de FastAPI. Las rutas no contienen lógica, así que migrar es mecánico. |
 | **Frontend sin build** | Módulos ES nativos y un helper `h()` que solo escribe con `textContent`, de modo que un mensaje de cliente no puede inyectar HTML. |
+| **Colores como tokens** | Todo color es una variable CSS con valor claro y oscuro. `theme.js` se carga en el `<head>` para aplicar el tema antes de pintar, y una prueba exige que cada token claro tenga su versión oscura. |
 
 ### Seguridad incluida
 
