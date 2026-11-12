@@ -20,7 +20,21 @@ En Windows también puedes hacer doble clic en `start.bat`. Luego abre <http://l
 
 La primera vez se crea `data/citabot.db` con datos de ejemplo. Para volver a ese estado, usa **Reiniciar datos de demo** en la pantalla Resumen.
 
+### Páginas
+
+| Ruta | Qué es |
+| --- | --- |
+| `/` | Página de inicio pública: funciones, cómo funciona, planes y preguntas frecuentes. |
+| `/precios` | Planes, comparación detallada y preguntas sobre facturación. |
+| `/registro` | Crea un negocio nuevo, vacío, con su primer usuario. |
+| `/login` | Inicio de sesión. **Ver la demo** entra a la clínica de ejemplo sin contraseña. |
+| `/app` | El panel. Sin sesión, redirige a `/login`. |
+
+Los precios y planes son de muestra: la facturación todavía no está implementada.
+
 ## Recorrido de 2 minutos
+
+Abre <http://localhost:8000> y pulsa **Ver la demo**.
 
 1. **Simulador de WhatsApp** (abajo a la izquierda). Envía «Hola» y agenda una cita con los botones, o escribe todo de una vez: «Quiero agendar una limpieza mañana a las 9».
 2. **Agenda**. La cita aparece con la etiqueta WhatsApp. Pulsa **Enviar recordatorios de mañana** y vuelve al simulador para verlo llegar.
@@ -74,13 +88,17 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 | **El simulador y el webhook usan el mismo caso de uso** | Ambos pasan por `AgentService`. Lo que pruebas en el simulador es lo que correrá con WhatsApp real. |
 | **Recibir y responder son dos pasos** | `receive` guarda el mensaje en una transacción corta y el webhook confirma a Meta de inmediato; `respond` corre en segundo plano. Un mensaje reenviado se reconoce por su id y no se responde dos veces. |
 | **El modelo nunca corre dentro de una transacción** | Entender el mensaje y redactar la respuesta ocurren sin el bloqueo de la base de datos, así que un cliente no espera por la llamada al modelo de otro. El diálogo, que es determinista, sí corre en una transacción; si necesita una respuesta de conocimiento, se deshace, se consulta y se repite. |
-| **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. Hoy `tenant()` en `api.py` devuelve siempre el negocio 1. |
+| **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. `tenant()` en `api.py` lo toma de la sesión, así que ninguna ruta del panel responde sin sesión ni alcanza datos de otro negocio. |
 | **Sin dependencias externas** | Arranca con `python run.py` en cualquier equipo. El costo: un mini-router propio en `framework.py` en vez de FastAPI. Las rutas no contienen lógica, así que migrar es mecánico. |
 | **Frontend sin build** | Módulos ES nativos y un helper `h()` que solo escribe con `textContent`, de modo que un mensaje de cliente no puede inyectar HTML. |
 
 ### Seguridad incluida
 
 - El servidor escucha solo en `127.0.0.1`.
+- Contraseñas con scrypt y sal por usuario. Sesiones en cookie `HttpOnly` y `SameSite=Lax`, guardadas en la base solo como hash; expiran a los 14 días.
+- Inicio de sesión con la misma respuesta para correo inexistente y contraseña errónea, y bloqueo temporal tras 5 intentos fallidos por correo.
+- Las escrituras a `/api/` desde otro origen se rechazan (protección CSRF).
+- **Ver la demo** entra sin contraseña al negocio de ejemplo. Apágalo con `CITABOT_DEMO_LOGIN=0` antes de exponer el servidor, y activa `CITABOT_COOKIE_SECURE=1` detrás de HTTPS.
 - Verificación de firma `X-Hub-Signature-256` en el webhook y comparación en tiempo constante del token.
 - Consultas SQL parametrizadas, límite de 1 MB por petición, protección contra *path traversal* en archivos estáticos.
 - Cabeceras `Content-Security-Policy`, `X-Frame-Options` y `X-Content-Type-Options`.
@@ -124,7 +142,7 @@ Los recordatorios se envían fuera de la ventana de 24 horas, así que en produc
 
 Ordenado por lo que bloquea antes a un primer cliente de pago.
 
-1. **Autenticación y tenants reales**: login del equipo, `tenant()` leído de la sesión, alta de negocios, Embedded Signup para conectar el número de cada cliente.
+1. **Un número de WhatsApp por negocio**: las cuentas y el panel ya separan negocios, pero el webhook entrega todos los mensajes al negocio de demostración. Falta Embedded Signup para que cada negocio conecte su número y enrutar por `phone_number_id`. También faltan invitar compañeros, recuperar contraseña y verificar el correo.
 2. **Cola duradera**: el webhook ya confirma de inmediato y descarta reenvíos, pero las respuestas pendientes viven en memoria. Si el proceso se detiene entre guardar un mensaje y responderlo, ese mensaje queda sin respuesta. Falta también manejar los estados de entrega.
 3. **Postgres** en lugar de SQLite, con una restricción de exclusión para los solapes de citas.
 4. **LLM en dos puertos**: `MessageInterpreter` (salida estructurada) y `AnswerGenerator` (respuesta redactada con los pasajes como contexto). Recuperación híbrida con embeddings cuando crezca el corpus.

@@ -73,21 +73,29 @@ CREATE TABLE IF NOT EXISTS knowledge_docs (
     content     TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY,
+    business_id   INTEGER NOT NULL REFERENCES businesses(id),
+    email         TEXT NOT NULL UNIQUE,
+    name          TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id, id);
 CREATE INDEX IF NOT EXISTS idx_appointments_time ON appointments (business_id, starts_at);
 CREATE INDEX IF NOT EXISTS idx_appointments_contact ON appointments (contact_id, starts_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations (business_id, updated_at);
 """
 
-TABLES = (
-    "messages",
-    "appointments",
-    "conversations",
-    "contacts",
-    "knowledge_docs",
-    "services",
-    "businesses",
-)  # fmt: skip  (child tables first, so deletes respect foreign keys)
+# What a business owns besides its own row and its users. Child tables first,
+# so deletes respect foreign keys.
+BUSINESS_CONTENT_TABLES = ("appointments", "conversations", "contacts", "knowledge_docs", "services")
 
 
 class Database:
@@ -159,10 +167,18 @@ class Database:
             row: sqlite3.Row | None = self._conn.execute(sql, params).fetchone()
             return row
 
-    def wipe(self) -> None:
+    def clear_business(self, business_id: int) -> None:
+        """Delete everything a business owns, keeping the business itself and its users."""
         with self:
-            for table in TABLES:
-                self._conn.execute(f"DELETE FROM {table}")  # fixed table names
+            self._conn.execute(
+                "DELETE FROM messages WHERE conversation_id IN "
+                "(SELECT id FROM conversations WHERE business_id = ?)",
+                (business_id,),
+            )
+            for table in BUSINESS_CONTENT_TABLES:
+                self._conn.execute(
+                    f"DELETE FROM {table} WHERE business_id = ?", (business_id,)
+                )  # fixed names
 
     def close(self) -> None:
         with self._lock:

@@ -14,7 +14,9 @@ export async function mount(root) {
         "header",
         { class: "page-head" },
         h("div", null, h("h1", null, "Resumen"), h("p", { class: "muted" }, `Así va ${business.name} en WhatsApp.`)),
-        h("button", { class: "btn", type: "button", onClick: reset }, "Reiniciar datos de demo"),
+        // Only the demo business can be put back to its sample data.
+        document.documentElement.dataset.demo === "true" &&
+          h("button", { class: "btn", type: "button", onClick: reset }, "Reiniciar datos de demo"),
       ),
       h(
         "section",

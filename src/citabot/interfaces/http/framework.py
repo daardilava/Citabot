@@ -11,6 +11,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from http.cookies import CookieError, SimpleCookie
 from typing import Any
 
 
@@ -31,6 +32,14 @@ class Request:
     body: bytes
     params: dict[str, int] = field(default_factory=dict)
 
+    def cookie(self, name: str) -> str | None:
+        jar = SimpleCookie()
+        try:
+            jar.load(self.headers.get("cookie", ""))
+        except CookieError:
+            return None
+        return jar[name].value if name in jar else None
+
     def json(self) -> dict[str, Any]:
         try:
             data = json.loads(self.body or b"{}")
@@ -46,6 +55,15 @@ class Response:
     status: int
     body: bytes
     content_type: str = "application/json; charset=utf-8"
+    headers: dict[str, str] = field(default_factory=dict)
+
+    def with_cookie(self, name: str, value: str, max_age: int, secure: bool) -> Response:
+        """Attach a session cookie: unreadable by scripts and not sent on cross-site requests."""
+        attributes = [f"{name}={value}", "Path=/", f"Max-Age={max_age}", "HttpOnly", "SameSite=Lax"]
+        if secure:
+            attributes.append("Secure")
+        self.headers["Set-Cookie"] = "; ".join(attributes)
+        return self
 
     @classmethod
     def json(cls, data: Any, status: int = 200) -> Response:

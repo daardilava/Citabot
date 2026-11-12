@@ -24,20 +24,33 @@ class ApiTestCase(unittest.TestCase):
         self.server = create_server("127.0.0.1", 0, build_router(self.c), self.c.settings.web_dir)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
-        self.addCleanup(self.c.db.close)
+        self.addCleanup(self.c.close)
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
+        self.cookie: str | None = None
+        if self.signed_in:
+            self.call("POST", "/api/auth/demo")
+
+    # Most tests exercise the panel, so they start signed in to the demo business.
+    signed_in: ClassVar[bool] = True
 
     def call(
         self, method: str, path: str, body: Any = None, headers: dict[str, str] | None = None
     ) -> tuple[int, Any]:
+        """Send a request, keeping the session cookie between calls like a browser."""
         data = body if isinstance(body, bytes) else (json.dumps(body).encode() if body is not None else None)
-        request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers or {})
+        headers = dict(headers or {})
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+        request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
-                raw, status = response.read(), response.status
+                raw, status, sent = response.read(), response.status, response.headers
         except urllib.error.HTTPError as error:
-            raw, status = error.read(), error.code
+            raw, status, sent = error.read(), error.code, error.headers
+        if sent.get("Set-Cookie"):
+            pair = sent["Set-Cookie"].split(";", 1)[0]
+            self.cookie = None if pair.endswith("=") else pair
         try:
             return status, json.loads(raw)
         except json.JSONDecodeError:
@@ -139,6 +152,27 @@ class ApiTest(ApiTestCase):
         self.assertIn("<title>", html)
         self.assertEqual(self.call("GET", "/../run.py")[0], 404)
         self.assertEqual(self.call("GET", "/%2e%2e/pyproject.toml")[0], 404)
+
+    def test_public_pages_have_clean_urls(self) -> None:
+        pages = {
+            "/": "WhatsApp",
+            "/precios": "Precios",
+            "/login": "Iniciar sesión",
+            "/registro": "Crear cuenta",
+            "/app": "Panel",
+            "/precios/": "Precios",
+        }
+        for path, title in pages.items():
+            with self.subTest(path=path):
+                status, html = self.call("GET", path)
+                self.assertEqual(status, 200)
+                self.assertIn(title, html.split("<title>", 1)[1].split("</title>", 1)[0])
+
+    def test_unknown_pages_get_the_404_page(self) -> None:
+        status, html = self.call("GET", "/no-existe")
+        self.assertEqual(status, 404)
+        self.assertIn("Esta página no existe", html)
+        self.assertEqual(self.call("GET", "/js/no-existe.js")[1]["error"]["code"], "not_found")
 
     def test_demo_reset(self) -> None:
         self.call("POST", "/api/simulator/messages", {"phone": "+57 1", "text": "Hola"})

@@ -43,6 +43,11 @@ class Settings:
     # read whole on every question instead of searched (about 3,000 tokens).
     whole_base_max_chars: int = 12_000
     llm_ipv4_only: bool = True
+    # «Ver la demo» signs anyone in to the demo business without a password.
+    # Fine on your own machine; turn it off before exposing the server.
+    demo_login: bool = True
+    # Send the session cookie only over HTTPS. Turn it on behind TLS.
+    cookie_secure: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -73,4 +78,6 @@ class Settings:
             answer_provider=answer_provider,
             whole_base_max_chars=int(env("CITABOT_WHOLE_BASE_MAX_CHARS", "12000")),
             llm_ipv4_only=env("CITABOT_LLM_IPV4_ONLY", "1") != "0",
+            demo_login=env("CITABOT_DEMO_LOGIN", "1") != "0",
+            cookie_secure=env("CITABOT_COOKIE_SECURE", "0") == "1",
         )

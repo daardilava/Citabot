@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Crear cuenta · Citabot</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="/css/site.css" />
+  </head>
+  <body class="auth">
+    <main class="auth-layout">
+      <section class="auth-panel">
+        <a class="brand brand-ink" href="/">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5" /></svg>
+          </span>
+          <span class="brand-name">Citabot</span>
+        </a>
+
+        <div class="auth-box">
+          <h1>Crea tu cuenta</h1>
+          <p class="muted">Gratis, sin tarjeta de crédito. Tu asistente queda listo para probar en el simulador.</p>
+
+          <form class="form" data-auth-form="signup" novalidate>
+            <label class="field">
+              <span class="field-label">Nombre del negocio</span>
+              <input type="text" name="business_name" autocomplete="organization" maxlength="80" required autofocus />
+            </label>
+            <label class="field">
+              <span class="field-label">Tu nombre</span>
+              <input type="text" name="name" autocomplete="name" maxlength="80" required />
+            </label>
+            <label class="field">
+              <span class="field-label">Correo</span>
+              <input type="email" name="email" autocomplete="email" maxlength="254" required />
+            </label>
+            <label class="field">
+              <span class="field-label">Contraseña</span>
+              <input type="password" name="password" autocomplete="new-password" minlength="8" required />
+              <small class="muted">Mínimo 8 caracteres.</small>
+            </label>
+            <p class="form-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-block" type="submit">Crear cuenta</button>
+          </form>
+
+          <p class="auth-switch muted">¿Ya tienes cuenta? <a class="text-link" href="/login">Inicia sesión</a></p>
+        </div>
+
+        <p class="auth-foot muted"><a href="/">← Volver al inicio</a></p>
+      </section>
+
+      <aside class="auth-aside" aria-hidden="true">
+        <h2>Lo que harás en los próximos minutos</h2>
+        <ol class="auth-steps">
+          <li><strong>Carga tus servicios</strong><span>Nombre, duración y precio de cada uno.</span></li>
+          <li><strong>Ajusta tu horario</strong><span>El asistente solo ofrece horas en las que atiendes.</span></li>
+          <li><strong>Escríbele como un cliente</strong><span>Pruébalo en el simulador antes de conectar WhatsApp.</span></li>
+        </ol>
+      </aside>
+    </main>
+
+    <script type="module" src="/js/auth.js"></script>
+  </body>
+</html>

@@ -15,5 +15,13 @@ class NotFoundError(DomainError):
     """The requested record does not exist for this business."""
 
 
+class AuthenticationError(DomainError):
+    """The credentials are wrong or the session is missing or expired."""
+
+
+class RateLimitedError(DomainError):
+    """Too many attempts in a short time; the caller must wait."""
+
+
 class SlotUnavailableError(DomainError):
     """The requested appointment slot is closed, past or already taken."""
