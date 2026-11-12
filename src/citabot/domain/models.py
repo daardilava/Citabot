@@ -69,6 +69,18 @@ class Business:
 
 
 @dataclass
+class User:
+    """A teammate who signs in to the panel of one business."""
+
+    id: int
+    business_id: int
+    email: str
+    name: str
+    password_hash: str
+    created_at: datetime
+
+
+@dataclass
 class Service:
     id: int
     business_id: int

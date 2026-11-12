@@ -20,6 +20,9 @@ async function request(method, path, body) {
     throw new ApiError(0, "network", "No hay conexión con el servidor. ¿Sigue corriendo?");
   }
   const data = await response.json().catch(() => null);
+  if (response.status === 401 && !path.startsWith("/api/auth/") && location.pathname !== "/login") {
+    location.assign("/login"); // the session ended: back to the sign-in page
+  }
   if (!response.ok) {
     const error = data?.error ?? {};
     throw new ApiError(response.status, error.code ?? "error", error.message ?? "Algo salió mal.");
@@ -30,6 +33,13 @@ async function request(method, path, body) {
 const query = (params) => new URLSearchParams(params).toString();
 
 export const api = {
+  health: () => request("GET", "/api/health"),
+  me: () => request("GET", "/api/auth/me"),
+  signup: (account) => request("POST", "/api/auth/signup", account),
+  login: (credentials) => request("POST", "/api/auth/login", credentials),
+  loginDemo: () => request("POST", "/api/auth/demo", {}),
+  logout: () => request("POST", "/api/auth/logout", {}),
+
   dashboard: () => request("GET", "/api/dashboard"),
   resetDemo: () => request("POST", "/api/demo/reset"),
 

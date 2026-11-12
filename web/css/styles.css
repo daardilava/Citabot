@@ -116,6 +116,11 @@ textarea {
 
 /* ------------------------------------------------------------ shell */
 
+/* Hidden until the session is confirmed, so a signed-out visitor never sees the panel flash. */
+.booting .shell {
+  visibility: hidden;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -246,6 +251,62 @@ textarea {
   background: #46c28d;
   box-shadow: 0 0 0 4px rgb(70 194 141 / 22%);
   flex: none;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 6px 0;
+  border-top: 1px solid #244a39;
+}
+
+.account-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  color: #fff;
+  font-size: 13.5px;
+}
+
+.account-text strong,
+.account-text small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-text small {
+  color: #9db3a7;
+}
+
+.account-out {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: #c9d8d0;
+  cursor: pointer;
+  flex: none;
+}
+
+.account-out:hover {
+  background: var(--pine-soft);
+  color: #fff;
+}
+
+.account-out svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .main {
@@ -494,6 +555,8 @@ textarea {
 }
 
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="tel"],
 input[type="search"],
 input[type="date"],

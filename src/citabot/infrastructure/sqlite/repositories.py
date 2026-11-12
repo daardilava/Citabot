@@ -25,6 +25,7 @@ from citabot.domain.models import (
     Sender,
     Service,
     TimeRange,
+    User,
 )
 
 from .db import Database
@@ -66,6 +67,17 @@ def _service(row: sqlite3.Row) -> Service:
         duration_minutes=row["duration_minutes"],
         price=row["price"],
         active=bool(row["active"]),
+    )
+
+
+def _user(row: sqlite3.Row) -> User:
+    return User(
+        id=row["id"],
+        business_id=row["business_id"],
+        email=row["email"],
+        name=row["name"],
+        password_hash=row["password_hash"],
+        created_at=datetime.fromisoformat(row["created_at"]),
     )
 
 
@@ -186,6 +198,51 @@ class SqliteBusinessRepository:
             "UPDATE services SET name = ?, duration_minutes = ?, price = ?, active = ? WHERE id = ?",
             (service.name, service.duration_minutes, service.price, int(service.active), service.id),
         )
+
+
+class SqliteUserRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, user_id: int) -> User:
+        row = self._db.query_one("SELECT * FROM users WHERE id = ?", (user_id,))
+        if row is None:
+            raise NotFoundError("Usuario no encontrado.")
+        return _user(row)
+
+    def find_by_email(self, email: str) -> User | None:
+        row = self._db.query_one("SELECT * FROM users WHERE email = ?", (email,))
+        return _user(row) if row else None
+
+    def add(self, business_id: int, email: str, name: str, password_hash: str, now: datetime) -> User:
+        user_id = self._db.execute(
+            "INSERT INTO users (business_id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            (business_id, email, name, password_hash, _iso(now)),
+        )
+        return self.get(user_id)
+
+
+class SqliteSessionRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def add(self, token_hash: str, user_id: int, expires_at: datetime, now: datetime) -> None:
+        self._db.execute(
+            "INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
+            (token_hash, user_id, _iso(expires_at), _iso(now)),
+        )
+
+    def find_user_id(self, token_hash: str, now: datetime) -> int | None:
+        row = self._db.query_one(
+            "SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?", (token_hash, _iso(now))
+        )
+        return int(row["user_id"]) if row else None
+
+    def delete(self, token_hash: str) -> None:
+        self._db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+
+    def delete_expired(self, now: datetime) -> None:
+        self._db.execute("DELETE FROM sessions WHERE expires_at <= ?", (_iso(now),))
 
 
 class SqliteContactRepository:

@@ -8,6 +8,14 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ### Añadido
 
+- Sitio público: página de inicio, precios, registro, inicio de sesión y página 404, con URLs
+  limpias (`/precios`, `/login`, `/registro`). El panel pasa a `/app`.
+- Cuentas: cada registro crea un negocio propio y vacío. El panel exige sesión y cada negocio solo
+  ve sus datos.
+- Sesiones en cookie `HttpOnly`, contraseñas con scrypt, bloqueo temporal tras intentos fallidos y
+  rechazo de escrituras desde otros sitios.
+- «Ver la demo» entra a la clínica de ejemplo sin contraseña; se apaga con `CITABOT_DEMO_LOGIN=0`.
+
 - El webhook de WhatsApp guarda el mensaje, confirma a Meta de inmediato y responde en segundo
   plano, en orden dentro de cada conversación.
 - Los mensajes que Meta reenvía se reconocen por su id y no se responden dos veces.
@@ -16,7 +24,9 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 - Las llamadas al modelo de lenguaje ya no ocurren dentro de la transacción de la base de datos:
   un cliente no espera por la respuesta de otro y el panel no se congela.
-- Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id`).
+- Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id` y
+  tablas `users` y `sessions`).
+- «Reiniciar datos de demo» solo afecta al negocio de demostración y conserva todas las cuentas.
 
 ### Corregido
 

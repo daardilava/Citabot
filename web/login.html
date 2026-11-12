@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Iniciar sesión · Citabot</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="/css/site.css" />
+  </head>
+  <body class="auth">
+    <main class="auth-layout">
+      <section class="auth-panel">
+        <a class="brand brand-ink" href="/">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5" /></svg>
+          </span>
+          <span class="brand-name">Citabot</span>
+        </a>
+
+        <div class="auth-box">
+          <h1>Bienvenido de nuevo</h1>
+          <p class="muted">Entra al panel de tu negocio.</p>
+
+          <div class="demo-box" data-demo hidden>
+            <div>
+              <strong>¿Solo quieres mirar?</strong>
+              <small class="muted">Entra a una clínica dental de ejemplo, sin crear cuenta.</small>
+            </div>
+            <button class="btn" type="button" data-demo-button>Ver la demo</button>
+          </div>
+          <p class="divider" data-demo hidden><span>o con tu cuenta</span></p>
+
+          <form class="form" data-auth-form="login" novalidate>
+            <label class="field">
+              <span class="field-label">Correo</span>
+              <input type="email" name="email" autocomplete="email" required autofocus />
+            </label>
+            <label class="field">
+              <span class="field-label">Contraseña</span>
+              <input type="password" name="password" autocomplete="current-password" required />
+            </label>
+            <p class="form-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-block" type="submit">Iniciar sesión</button>
+          </form>
+
+          <p class="auth-switch muted">¿No tienes cuenta? <a class="text-link" href="/registro">Crea una gratis</a></p>
+        </div>
+
+        <p class="auth-foot muted"><a href="/">← Volver al inicio</a></p>
+      </section>
+
+      <aside class="auth-aside" aria-hidden="true">
+        <h2>Mientras estabas fuera, tu asistente siguió atendiendo.</h2>
+        <ul class="auth-facts">
+          <li><strong>24/7</strong><span>responde aunque estés con un cliente</span></li>
+          <li><strong>Segundos</strong><span>en contestar cada mensaje</span></li>
+          <li><strong>Sin choques</strong><span>cada reserva se valida contra tu agenda</span></li>
+        </ul>
+      </aside>
+    </main>
+
+    <script type="module" src="/js/auth.js"></script>
+  </body>
+</html>

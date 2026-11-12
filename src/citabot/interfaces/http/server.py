@@ -8,7 +8,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
-from citabot.domain.errors import DomainError, NotFoundError, SlotUnavailableError, ValidationError
+from citabot.domain.errors import (
+    AuthenticationError,
+    DomainError,
+    NotFoundError,
+    RateLimitedError,
+    SlotUnavailableError,
+    ValidationError,
+)
 
 from .framework import HttpError, Request, Response, Router
 
@@ -19,7 +26,10 @@ _STATUS_BY_ERROR: dict[type[DomainError], tuple[int, str]] = {
     ValidationError: (400, "validation_error"),
     NotFoundError: (404, "not_found"),
     SlotUnavailableError: (409, "slot_unavailable"),
+    AuthenticationError: (401, "unauthorized"),
+    RateLimitedError: (429, "too_many_requests"),
 }
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -67,6 +77,16 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
 
         def _dispatch(self, path: str, query: str) -> Response:
             handler, params = router.resolve(self.command, path)
+            # CSRF: a browser names the page that sent a write request. Refuse the
+            # ones that come from another site (the session cookie is SameSite=Lax too).
+            origin = self.headers.get("Origin")
+            if (
+                origin
+                and self.command not in _SAFE_METHODS
+                and path.startswith("/api/")
+                and urlsplit(origin).netloc != self.headers.get("Host")
+            ):
+                raise HttpError(403, "cross_site_request", "Solicitud de otro sitio rechazada.")
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError as exc:
@@ -87,10 +107,15 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
         def _static(self, path: str) -> Response:
             if self.command != "GET":
                 raise HttpError(405, "method_not_allowed", "Método no permitido.")
-            relative = "index.html" if path in ("", "/") else path.lstrip("/")
+            relative = "index.html" if path in ("", "/") else path.strip("/")
+            if "." not in relative.rsplit("/", 1)[-1]:
+                relative += ".html"  # clean URLs: /precios serves precios.html
             target = (web_root / relative).resolve()
             # Block path traversal: the resolved file must stay inside web/.
             if web_root not in target.parents or not target.is_file():
+                not_found = web_root / "404.html"
+                if target.suffix == ".html" and not_found.is_file():
+                    return Response(404, not_found.read_bytes(), _CONTENT_TYPES[".html"])
                 raise HttpError(404, "not_found", "Archivo no encontrado.")
             content_type = (
                 _CONTENT_TYPES.get(target.suffix.lower())
@@ -105,7 +130,7 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(response.body)))
             # no-cache = revalidate; keeps the panel fresh while you edit the files.
             self.send_header("Cache-Control", "no-cache" if cacheable else "no-store")
-            for name, value in _SECURITY_HEADERS.items():
+            for name, value in (_SECURITY_HEADERS | response.headers).items():
                 self.send_header(name, value)
             self.end_headers()
             self.wfile.write(response.body)

@@ -1,7 +1,7 @@
 // App shell: hash router, sidebar state and the "needs attention" badge.
 
 import { api } from "./api.js";
-import { h, replace } from "./dom.js";
+import { h, initials, replace } from "./dom.js";
 import * as calendar from "./views/calendar.js";
 import * as dashboard from "./views/dashboard.js";
 import * as inbox from "./views/inbox.js";
@@ -73,8 +73,30 @@ export async function refreshShell() {
   }
 }
 
-window.addEventListener("hashchange", render);
-document.addEventListener("citabot:changed", refreshShell);
-setInterval(refreshShell, BADGE_REFRESH_MS);
-refreshShell();
-render();
+/** Who is signed in. Without a session the panel never renders: go to sign-in. */
+async function start() {
+  let account;
+  try {
+    account = await api.me();
+  } catch (error) {
+    if (error.status === 401) return location.replace("/login");
+    throw error;
+  }
+  document.getElementById("account-name").textContent = account.user.name;
+  document.getElementById("account-email").textContent = account.user.email;
+  document.getElementById("account-initials").textContent = initials(account.user.name);
+  document.documentElement.dataset.demo = String(account.is_demo);
+  document.body.classList.remove("booting");
+  document.getElementById("logout").addEventListener("click", async () => {
+    await api.logout().catch(() => null);
+    location.assign("/");
+  });
+
+  window.addEventListener("hashchange", render);
+  document.addEventListener("citabot:changed", refreshShell);
+  setInterval(refreshShell, BADGE_REFRESH_MS);
+  refreshShell();
+  render();
+}
+
+start();

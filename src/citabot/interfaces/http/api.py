@@ -7,28 +7,51 @@ import logging
 from datetime import datetime, timedelta
 from functools import partial
 
+from citabot.application.auth import Session
 from citabot.container import Container
-from citabot.domain.errors import ValidationError
-from citabot.domain.models import Appointment, AppointmentStatus, ConversationMode
+from citabot.domain.errors import AuthenticationError, ValidationError
+from citabot.domain.models import Appointment, AppointmentStatus, ConversationMode, User
 from citabot.infrastructure.messaging.whatsapp_cloud import parse_webhook, signature_is_valid
+from citabot.infrastructure.seed import DEMO_EMAIL
 
 from . import schemas as s
 from .framework import HttpError, Request, Response, Router
 
 logger = logging.getLogger(__name__)
 
+SESSION_COOKIE = "citabot_session"
+
 
 def build_router(c: Container) -> Router:
     router = Router()
 
-    def tenant(_request: Request) -> int:
-        """Resolve the business a request acts on.
+    def current_user(request: Request) -> User:
+        token = request.cookie(SESSION_COOKIE)
+        user = c.auth.authenticate(token) if token else None
+        if user is None:
+            raise AuthenticationError("Inicia sesión para continuar.")
+        return user
 
-        Single-tenant MVP: always the default business. With authentication this
-        reads the tenant from the session or token, and nothing else changes,
-        because every use case already takes a business id.
+    def tenant(request: Request) -> int:
+        """The business a request acts on: the one the signed-in user belongs to.
+
+        Every panel route calls this, so none of them answers without a session
+        and none can reach another business's data.
         """
-        return c.settings.default_business_id
+        return current_user(request).business_id
+
+    def signed_in(session: Session, status: int = 200) -> Response:
+        max_age = int((session.expires_at - c.clock.now()).total_seconds())
+        response = Response.json(account_json(session.user), status)
+        return response.with_cookie(SESSION_COOKIE, session.token, max_age, c.settings.cookie_secure)
+
+    def account_json(user: User) -> dict[str, object]:
+        business = c.business.get(user.business_id)
+        return {
+            "user": {"name": user.name, "email": user.email},
+            "business": {"id": business.id, "name": business.name},
+            "is_demo": business.id == c.settings.default_business_id,
+        }
 
     def appointment_json(business_id: int, appointment: Appointment) -> dict[str, object]:
         return s.appointment_out(
@@ -41,7 +64,50 @@ def build_router(c: Container) -> Router:
 
     @router.route("GET", "/api/health")
     def health(_request: Request) -> Response:
-        return Response.json({"status": "ok", "messaging_provider": c.settings.messaging_provider})
+        return Response.json(
+            {
+                "status": "ok",
+                "messaging_provider": c.settings.messaging_provider,
+                "demo_login": c.settings.demo_login,
+            }
+        )
+
+    # ------------------------------------------------------------ accounts
+
+    @router.route("POST", "/api/auth/signup")
+    def signup(request: Request) -> Response:
+        body = request.json()
+        session = c.auth.register(
+            business_name=s.text_field(body, "business_name"),
+            name=s.text_field(body, "name"),
+            email=s.text_field(body, "email"),
+            password=s.text_field(body, "password"),
+        )
+        return signed_in(session, 201)
+
+    @router.route("POST", "/api/auth/login")
+    def login(request: Request) -> Response:
+        body = request.json()
+        return signed_in(c.auth.login(s.text_field(body, "email"), s.text_field(body, "password")))
+
+    @router.route("POST", "/api/auth/demo")
+    def login_demo(_request: Request) -> Response:
+        if not c.settings.demo_login:
+            raise HttpError(403, "demo_disabled", "La demostración no está disponible.")
+        return signed_in(c.auth.login_without_password(DEMO_EMAIL))
+
+    @router.route("POST", "/api/auth/logout")
+    def logout(request: Request) -> Response:
+        token = request.cookie(SESSION_COOKIE)
+        if token:
+            c.auth.logout(token)
+        return Response.json({"signed_out": True}).with_cookie(
+            SESSION_COOKIE, "", 0, c.settings.cookie_secure
+        )
+
+    @router.route("GET", "/api/auth/me")
+    def me(request: Request) -> Response:
+        return Response.json(account_json(current_user(request)))
 
     @router.route("GET", "/api/dashboard")
     def dashboard(request: Request) -> Response:
@@ -61,7 +127,9 @@ def build_router(c: Container) -> Router:
         )
 
     @router.route("POST", "/api/demo/reset")
-    def reset_demo(_request: Request) -> Response:
+    def reset_demo(request: Request) -> Response:
+        if tenant(request) != c.settings.default_business_id:
+            raise HttpError(403, "not_demo", "Solo el negocio de demostración se puede reiniciar.")
         c.reset_demo()
         return Response.json({"reset": True})
 
