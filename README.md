@@ -71,7 +71,9 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 | **Las reglas de agenda son deterministas** | Un modelo de lenguaje nunca decide si un horario está libre. El agente entiende el mensaje y delega la reserva a `BookingService`, que valida y escribe en una sola transacción. |
 | **El agente responde solo con lo recuperado** | `KnowledgeService` contesta si la recuperación supera un umbral de confianza. Si no, marca el chat *Por atender* y ofrece una persona. No inventa. |
 | **Puertos para todo lo reemplazable** | `MessageInterpreter`, `PassageRetriever`, `AnswerGenerator`, `MessagingGateway` y los repositorios son `Protocol`. Cambiar reglas por un LLM, BM25 por embeddings o SQLite por Postgres es escribir un adaptador. |
-| **El simulador y el webhook usan el mismo caso de uso** | Ambos llaman a `AgentService.handle_inbound`. Lo que pruebas en el simulador es lo que correrá con WhatsApp real. |
+| **El simulador y el webhook usan el mismo caso de uso** | Ambos pasan por `AgentService`. Lo que pruebas en el simulador es lo que correrá con WhatsApp real. |
+| **Recibir y responder son dos pasos** | `receive` guarda el mensaje en una transacción corta y el webhook confirma a Meta de inmediato; `respond` corre en segundo plano. Un mensaje reenviado se reconoce por su id y no se responde dos veces. |
+| **El modelo nunca corre dentro de una transacción** | Entender el mensaje y redactar la respuesta ocurren sin el bloqueo de la base de datos, así que un cliente no espera por la llamada al modelo de otro. El diálogo, que es determinista, sí corre en una transacción; si necesita una respuesta de conocimiento, se deshace, se consulta y se repite. |
 | **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. Hoy `tenant()` en `api.py` devuelve siempre el negocio 1. |
 | **Sin dependencias externas** | Arranca con `python run.py` en cualquier equipo. El costo: un mini-router propio en `framework.py` en vez de FastAPI. Las rutas no contienen lógica, así que migrar es mecánico. |
 | **Frontend sin build** | Módulos ES nativos y un helper `h()` que solo escribe con `textContent`, de modo que un mensaje de cliente no puede inyectar HTML. |
@@ -89,7 +91,7 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 python -m unittest discover -s tests -t .
 ```
 
-51 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. 
+63 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. 
 
 La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff` y `mypy --strict`. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
@@ -123,7 +125,7 @@ Los recordatorios se envían fuera de la ventana de 24 horas, así que en produc
 Ordenado por lo que bloquea antes a un primer cliente de pago.
 
 1. **Autenticación y tenants reales**: login del equipo, `tenant()` leído de la sesión, alta de negocios, Embedded Signup para conectar el número de cada cliente.
-2. **Webhook robusto**: responder 200 de inmediato y procesar en una cola, deduplicar por id de mensaje, manejar estados de entrega.
+2. **Cola duradera**: el webhook ya confirma de inmediato y descarta reenvíos, pero las respuestas pendientes viven en memoria. Si el proceso se detiene entre guardar un mensaje y responderlo, ese mensaje queda sin respuesta. Falta también manejar los estados de entrega.
 3. **Postgres** en lugar de SQLite, con una restricción de exclusión para los solapes de citas.
 4. **LLM en dos puertos**: `MessageInterpreter` (salida estructurada) y `AnswerGenerator` (respuesta redactada con los pasajes como contexto). Recuperación híbrida con embeddings cuando crezca el corpus.
 5. **Zonas horarias**: hoy las horas son locales del servidor. Guardar UTC y convertir con la zona del negocio.

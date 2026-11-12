@@ -80,6 +80,8 @@ class InboundMessage:
     phone: str
     text: str
     profile_name: str | None
+    # Meta's id for the message ("wamid..."); the same one comes back on a redelivery.
+    message_id: str | None = None
 
 
 def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
@@ -97,7 +99,15 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
                 text = _message_text(message)
                 sender = message.get("from")
                 if text and sender:
-                    inbound.append(InboundMessage(f"+{sender}", text, names.get(sender)))
+                    message_id = message.get("id")
+                    inbound.append(
+                        InboundMessage(
+                            f"+{sender}",
+                            text,
+                            names.get(sender),
+                            message_id if isinstance(message_id, str) else None,
+                        )
+                    )
     return inbound
 
 

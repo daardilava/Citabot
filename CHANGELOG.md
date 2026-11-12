@@ -6,6 +6,23 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ## [Sin publicar]
 
+### Añadido
+
+- El webhook de WhatsApp guarda el mensaje, confirma a Meta de inmediato y responde en segundo
+  plano, en orden dentro de cada conversación.
+- Los mensajes que Meta reenvía se reconocen por su id y no se responden dos veces.
+
+### Cambiado
+
+- Las llamadas al modelo de lenguaje ya no ocurren dentro de la transacción de la base de datos:
+  un cliente no espera por la respuesta de otro y el panel no se congela.
+- Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id`).
+
+### Corregido
+
+- La conexión con la API de Anthropic usa solo IPv4, lo que evita esperas de unos 20 s en redes
+  con IPv6 mal enrutado.
+
 ## [0.1.0] - 2026-11-12
 
 Primera versión: MVP navegable que corre en un solo equipo.

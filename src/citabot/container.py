@@ -20,6 +20,7 @@ from citabot.application.ports import (
 from citabot.application.reminders import ReminderService
 from citabot.config import Settings
 from citabot.infrastructure.anthropic_client import create_client
+from citabot.infrastructure.background import BackgroundRunner
 from citabot.infrastructure.clock import SystemClock
 from citabot.infrastructure.messaging.simulator import SimulatorGateway
 from citabot.infrastructure.messaging.whatsapp_cloud import WhatsAppCloudGateway
@@ -53,6 +54,12 @@ class Container:
     reminders: ReminderService
     dashboard: DashboardReadModel
     contacts: SqliteContactRepository
+    background: BackgroundRunner
+
+    def close(self) -> None:
+        """Finish the replies in progress, then release the database."""
+        self.background.shutdown()
+        self.db.close()
 
     def reset_demo(self) -> None:
         """Wipe everything and load the demo data again."""
@@ -140,4 +147,5 @@ def build_container(
         reminders=ReminderService(db, businesses, appointments, contacts, conversations, messenger, clock),
         dashboard=SqliteDashboardReadModel(db),
         contacts=contacts,
+        background=BackgroundRunner(),
     )

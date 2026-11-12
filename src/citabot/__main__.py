@@ -30,7 +30,7 @@ def main() -> None:
         print("\nServidor detenido.")
     finally:
         server.server_close()
-        container.db.close()
+        container.close()
 
 
 if __name__ == "__main__":

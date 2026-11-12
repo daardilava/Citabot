@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS messages (
     sender          TEXT NOT NULL CHECK (sender IN ('customer', 'bot', 'agent')),
     text            TEXT NOT NULL,
     options         TEXT NOT NULL DEFAULT '[]',
-    created_at      TEXT NOT NULL
+    created_at      TEXT NOT NULL,
+    external_id     TEXT
 );
 CREATE TABLE IF NOT EXISTS appointments (
     id            INTEGER PRIMARY KEY,
@@ -110,6 +111,18 @@ class Database:
         self._lock = threading.RLock()
         self._depth = 0
         self._conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring a database created by an earlier version up to the current schema."""
+        columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(messages)")}
+        if "external_id" not in columns:
+            self._conn.execute("ALTER TABLE messages ADD COLUMN external_id TEXT")
+        # The provider's message id, unique so a redelivered webhook is stored once.
+        self._conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_external "
+            "ON messages (external_id) WHERE external_id IS NOT NULL"
+        )
 
     def __enter__(self) -> Database:
         self._lock.acquire()

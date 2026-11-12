@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import logging
 from datetime import datetime, timedelta
+from functools import partial
 
 from citabot.container import Container
 from citabot.domain.errors import ValidationError
@@ -270,15 +271,27 @@ def build_router(c: Container) -> Router:
         elif c.settings.messaging_provider == "whatsapp_cloud":
             # Never accept unsigned webhooks once real messages are flowing.
             raise HttpError(503, "not_configured", "Falta WHATSAPP_APP_SECRET.")
-        handled = 0
+        # Store each message now and answer it in the background: Meta redelivers
+        # a webhook that is not acknowledged within a few seconds, and a reply
+        # that waits for a language model can take longer than that.
+        accepted = 0
         for inbound in parse_webhook(request.json()):
             try:
-                c.agent.handle_inbound(
-                    c.settings.default_business_id, inbound.phone, inbound.text, inbound.profile_name
+                received = c.agent.receive(
+                    c.settings.default_business_id,
+                    inbound.phone,
+                    inbound.text,
+                    inbound.profile_name,
+                    inbound.message_id,
                 )
-                handled += 1
             except Exception:  # always acknowledge, or Meta retries the batch
-                logger.exception("No se pudo procesar un mensaje entrante")
-        return Response.json({"received": handled})
+                logger.exception("No se pudo guardar un mensaje entrante")
+                continue
+            if received.duplicate:
+                continue
+            accepted += 1
+            # Keyed by conversation, so one customer's messages are answered in order.
+            c.background.submit(partial(c.agent.respond, received), key=received.conversation_id)
+        return Response.json({"received": accepted})
 
     return router

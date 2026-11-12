@@ -157,7 +157,12 @@ class ConversationRepository(Protocol):
         text: str,
         options: Sequence[str],
         now: datetime,
+        external_id: str | None = None,
     ) -> Message: ...
+    def has_message(self, external_id: str) -> bool:
+        """True when a message with this provider id is already stored."""
+        ...
+
     def list_messages(self, conversation_id: int) -> list[Message]: ...
 
 
