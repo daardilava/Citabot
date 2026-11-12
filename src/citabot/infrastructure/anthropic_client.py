@@ -12,7 +12,7 @@ def create_client(ipv4_only: bool = True) -> Any:
     try:
         anthropic = importlib.import_module("anthropic")
     except ImportError as exc:
-        raise RuntimeError("Los adaptadores LLM necesitan el SDK de Anthropic: pip install anthropic") from exc
+        raise RuntimeError("Los adaptadores LLM necesitan el SDK: pip install anthropic") from exc
     options: dict[str, Any] = {"timeout": TIMEOUT_SECONDS, "max_retries": 1}
     if ipv4_only:
         # On a network that advertises IPv6 but cannot route it, every new connection

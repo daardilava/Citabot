@@ -19,10 +19,10 @@ from citabot.application.ports import (
 )
 from citabot.application.reminders import ReminderService
 from citabot.config import Settings
+from citabot.infrastructure.anthropic_client import create_client
 from citabot.infrastructure.clock import SystemClock
 from citabot.infrastructure.messaging.simulator import SimulatorGateway
 from citabot.infrastructure.messaging.whatsapp_cloud import WhatsAppCloudGateway
-from citabot.infrastructure.anthropic_client import create_client
 from citabot.infrastructure.nlu.llm import LlmInterpreter
 from citabot.infrastructure.nlu.rules import RuleBasedInterpreter
 from citabot.infrastructure.retrieval.bm25 import Bm25Retriever
