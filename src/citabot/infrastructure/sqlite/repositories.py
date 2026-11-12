@@ -282,11 +282,21 @@ class SqliteConversationRepository:
         text: str,
         options: Sequence[str],
         now: datetime,
+        external_id: str | None = None,
     ) -> Message:
         message_id = self._db.execute(
-            "INSERT INTO messages (conversation_id, direction, sender, text, options, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (conversation_id, direction.value, sender.value, text, json.dumps(list(options)), _iso(now)),
+            "INSERT INTO messages "
+            "(conversation_id, direction, sender, text, options, created_at, external_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                conversation_id,
+                direction.value,
+                sender.value,
+                text,
+                json.dumps(list(options)),
+                _iso(now),
+                external_id,
+            ),
         )
         return Message(
             id=message_id,
@@ -297,6 +307,10 @@ class SqliteConversationRepository:
             created_at=now.replace(microsecond=0),
             options=list(options),
         )
+
+    def has_message(self, external_id: str) -> bool:
+        row = self._db.query_one("SELECT 1 FROM messages WHERE external_id = ?", (external_id,))
+        return row is not None
 
     def list_messages(self, conversation_id: int) -> list[Message]:
         rows = self._db.query(

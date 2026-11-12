@@ -9,6 +9,7 @@ the thing that decides whether a slot is free.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
@@ -28,7 +29,7 @@ from citabot.domain.models import (
 )
 
 from .booking import BookingService
-from .knowledge import KnowledgeService
+from .knowledge import Answer, KnowledgeService
 from .messenger import ConversationMessenger, Reply
 from .ports import (
     BusinessRepository,
@@ -45,6 +46,7 @@ from .text import WEEKDAYS, day_long, day_short, fold, hhmm, words
 MAX_INBOUND_CHARS = 2000
 MAX_BOOKING_DAYS_AHEAD = 60
 MAX_SLOT_OPTIONS = 10  # WhatsApp list messages allow up to 10 rows
+MAX_KNOWLEDGE_LOOKUPS = 2  # a turn asks the knowledge base about one question, in practice
 
 MENU = ["Agendar cita", "Ver mis citas", "Horarios y precios", "Hablar con una persona"]
 _ABORT_PHRASES = {"cancelar", "salir", "no gracias", "olvidalo", "ya no", "cancelar proceso"}
@@ -52,9 +54,30 @@ _GENERIC_SERVICE_WORDS = {"dental", "cita", "consulta", "control", "inicial", "g
 
 
 @dataclass(frozen=True)
+class Received:
+    """An inbound message that is already stored and waiting for its reply."""
+
+    business_id: int
+    contact_id: int
+    conversation_id: int
+    text: str
+    # True when the provider delivered a message we had already stored.
+    duplicate: bool = False
+
+
+@dataclass(frozen=True)
 class InboundResult:
     conversation_id: int
     replies: list[Message]
+    duplicate: bool = False
+
+
+class _KnowledgeNeededError(Exception):
+    """The dialogue needs a knowledge answer that has not been looked up yet."""
+
+    def __init__(self, question: str) -> None:
+        super().__init__(question)
+        self.question = question
 
 
 class AgentService:
@@ -79,12 +102,35 @@ class AgentService:
         self._interpreter = interpreter
         self._messenger = messenger
         self._clock = clock
+        self._turn_locks: dict[int, threading.Lock] = {}
+        self._turn_locks_guard = threading.Lock()
 
-    # ------------------------------------------------------------ entry point
+    # ------------------------------------------------------------ entry points
 
     def handle_inbound(
-        self, business_id: int, phone: str, text: str, profile_name: str | None = None
+        self,
+        business_id: int,
+        phone: str,
+        text: str,
+        profile_name: str | None = None,
+        message_id: str | None = None,
     ) -> InboundResult:
+        """Store the message and answer it in one call (simulator, tests)."""
+        return self.respond(self.receive(business_id, phone, text, profile_name, message_id))
+
+    def receive(
+        self,
+        business_id: int,
+        phone: str,
+        text: str,
+        profile_name: str | None = None,
+        message_id: str | None = None,
+    ) -> Received:
+        """Store the inbound message. Fast and database-only, so a webhook can
+        acknowledge right after it and answer later with `respond`.
+
+        `message_id` is the provider's id; a message seen before is not stored again.
+        """
         text = text.strip()[:MAX_INBOUND_CHARS]
         phone = phone.strip()
         if not text or not phone:
@@ -92,35 +138,80 @@ class AgentService:
 
         with self._uow:
             now = self._clock.now()
-            business = self._businesses.get(business_id)
             contact = self._contact_for(business_id, phone, profile_name, now)
             conversation = self._conversations.find_by_contact(contact.id) or (
                 self._conversations.add(business_id, contact.id, now)
             )
+            if message_id and self._conversations.has_message(message_id):
+                return Received(business_id, contact.id, conversation.id, text, duplicate=True)
             self._conversations.add_message(
-                conversation.id, Direction.INBOUND, Sender.CUSTOMER, text, [], now
+                conversation.id, Direction.INBOUND, Sender.CUSTOMER, text, [], now, external_id=message_id
             )
             conversation.updated_at = now
-
-            replies: list[Reply] = []
             if conversation.mode is ConversationMode.HUMAN:
                 conversation.needs_attention = True  # a teammate owns this chat
-            else:
-                replies = self._respond(business, contact, conversation, text, now)
-                conversation.state["options"] = replies[-1].options if replies else []
             self._conversations.save(conversation)
-            outbound = self._messenger.record(conversation, Sender.BOT, replies)
+        return Received(business_id, contact.id, conversation.id, text)
+
+    def respond(self, received: Received) -> InboundResult:
+        """Work out the reply to a stored message, record it and deliver it.
+
+        Language work (the interpreter and the knowledge answer, which may be
+        slow model calls) runs outside the transaction, so other customers and
+        the panel are never blocked by it. The dialogue itself is deterministic
+        and runs inside one: when it needs a knowledge answer that has not been
+        looked up yet, it rolls back, the answer is fetched, and it runs again.
+        """
+        if received.duplicate:
+            return InboundResult(received.conversation_id, [], duplicate=True)
+
+        business_id = received.business_id
+        with self._turn_lock(received.conversation_id):  # one turn at a time per chat
+            now = self._clock.now()
+            snapshot = self._conversations.get(business_id, received.conversation_id)
+            if snapshot.mode is ConversationMode.HUMAN:
+                return InboundResult(snapshot.id, [])
+            text = self._resolve_option(received.text, snapshot.state)
+            intr = self._interpreter.interpret(text, now.date())
+
+            answers: dict[str, Answer | None] = {}
+            for _ in range(MAX_KNOWLEDGE_LOOKUPS + 1):
+                try:
+                    with self._uow:
+                        business = self._businesses.get(business_id)
+                        contact = self._contacts.get(received.contact_id)
+                        conversation = self._conversations.get(business_id, received.conversation_id)
+                        replies: list[Reply] = []
+                        if conversation.mode is ConversationMode.BOT:  # nobody took over meanwhile
+                            replies = self._respond(business, contact, conversation, text, intr, now, answers)
+                            conversation.state["options"] = replies[-1].options if replies else []
+                        self._conversations.save(conversation)
+                        outbound = self._messenger.record(conversation, Sender.BOT, replies)
+                    break
+                except _KnowledgeNeededError as need:
+                    answers[need.question] = self._knowledge.answer(business_id, need.question)
+            else:
+                raise RuntimeError("the dialogue kept asking for knowledge answers")
 
         self._messenger.deliver(contact, outbound)
-        return InboundResult(conversation.id, outbound)
+        return InboundResult(received.conversation_id, outbound)
+
+    def _turn_lock(self, conversation_id: int) -> threading.Lock:
+        with self._turn_locks_guard:
+            return self._turn_locks.setdefault(conversation_id, threading.Lock())
 
     # ------------------------------------------------------------ routing
 
     def _respond(
-        self, business: Business, contact: Contact, conv: Conversation, text: str, now: datetime
+        self,
+        business: Business,
+        contact: Contact,
+        conv: Conversation,
+        text: str,
+        intr: Interpretation,
+        now: datetime,
+        answers: dict[str, Answer | None],
     ) -> list[Reply]:
-        text = self._resolve_option(text, conv.state)
-        intr = self._interpreter.interpret(text, now.date())
         folded = fold(text)
         flow = conv.state.get("flow")
 
@@ -139,13 +230,13 @@ class AgentService:
             if folded in _ABORT_PHRASES:
                 conv.state = {}
                 return [Reply("Listo, no agendé nada. ¿Te ayudo con algo más?", MENU)]
-            return self._booking_step(business, contact, conv, intr, text, now)
+            return self._booking_step(business, contact, conv, intr, text, now, answers)
         if flow == "cancel":
             return self._cancel_step(business, conv, intr, text)
 
         if intr.intent is Intent.BOOK:
             conv.state = {"flow": "booking"}
-            return self._booking_step(business, contact, conv, intr, text, now, entering=True)
+            return self._booking_step(business, contact, conv, intr, text, now, answers, entering=True)
         if intr.intent is Intent.CANCEL:
             return self._start_cancel(business, contact, conv)
         if intr.intent is Intent.MY_APPOINTMENTS:
@@ -165,7 +256,7 @@ class AgentService:
         if intr.intent is Intent.GREETING:
             return [Reply(business.welcome_message, MENU)]
 
-        answer = self._knowledge.answer(business.id, text)
+        answer = _lookup(text, answers)
         if answer is not None:
             return [Reply(answer.text, ["Agendar cita", "Hablar con una persona"])]
 
@@ -188,6 +279,7 @@ class AgentService:
         intr: Interpretation,
         text: str,
         now: datetime,
+        answers: dict[str, Answer | None],
         entering: bool = False,
     ) -> list[Reply]:
         """Fill whatever the message provides, then ask for the first missing piece.
@@ -261,7 +353,7 @@ class AgentService:
         if service is None:
             st.pop("service_id", None)
             prompt = Reply("¿Qué servicio necesitas?", [s.name for s in services])
-            return self._ask(business, text, intr, progressed, notes, prompt)
+            return self._ask(text, intr, progressed, notes, prompt, answers)
 
         # --- day
         day = date.fromisoformat(st["date"]) if st.get("date") else None
@@ -300,7 +392,7 @@ class AgentService:
                 "Estos son los más próximos con disponibilidad (también puedes escribir otra fecha):",
                 [day_short(d) for d in days],
             )
-            return self._ask(business, text, intr, progressed, notes, prompt)
+            return self._ask(text, intr, progressed, notes, prompt, answers)
 
         # --- time
         chosen: datetime | None = None
@@ -315,13 +407,13 @@ class AgentService:
                 f"Para el {day_long(day)} tengo estos horarios. ¿Cuál te sirve?",
                 [hhmm(s) for s in _spread(slots, MAX_SLOT_OPTIONS)],
             )
-            return self._ask(business, text, intr, progressed, notes, prompt)
+            return self._ask(text, intr, progressed, notes, prompt, answers)
 
         # --- name
         if not contact.name:
             st["awaiting_name"] = True
             prompt = Reply("¿A nombre de quién agendo la cita?")
-            return self._ask(business, text, intr, progressed, notes, prompt)
+            return self._ask(text, intr, progressed, notes, prompt, answers)
 
         # --- confirmation
         if wants_confirm:
@@ -352,16 +444,16 @@ class AgentService:
             f"• {service.name}\n• {day_long(day).capitalize()}\n• {hhmm(chosen)}\n\n¿Confirmas?",
             ["Sí, confirmar", "Cambiar hora", "Cancelar"],
         )
-        return self._ask(business, text, intr, progressed, notes, prompt)
+        return self._ask(text, intr, progressed, notes, prompt, answers)
 
+    @staticmethod
     def _ask(
-        self,
-        business: Business,
         text: str,
         intr: Interpretation,
         progressed: bool,
         notes: list[str],
         prompt: Reply,
+        answers: dict[str, Answer | None],
     ) -> list[Reply]:
         """Prefix the next question with a correction, an FAQ answer or a nudge."""
         if notes:
@@ -370,7 +462,7 @@ class AgentService:
             return [prompt]
         # The customer said something that did not move the booking forward.
         # It may be a question ("¿tienen parqueadero?"): answer it, then resume.
-        answer = None if intr.affirmation is not None else self._knowledge.answer(business.id, text)
+        answer = None if intr.affirmation is not None else _lookup(text, answers)
         if answer is not None:
             return [Reply(answer.text), prompt]
         return [Reply("No te entendí bien 😅. " + prompt.text, prompt.options)]
@@ -491,6 +583,13 @@ class AgentService:
             return text  # here "10" means ten o'clock, not the tenth option
         index = int(stripped)
         return str(options[index - 1]) if 1 <= index <= len(options) else text
+
+
+def _lookup(question: str, answers: dict[str, Answer | None]) -> Answer | None:
+    """Return the knowledge answer fetched for this turn, or ask `respond` to fetch it."""
+    if question not in answers:
+        raise _KnowledgeNeededError(question)
+    return answers[question]
 
 
 def _match_service(folded_text: str, services: list[Service]) -> Service | None:

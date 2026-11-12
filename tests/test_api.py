@@ -156,8 +156,8 @@ class WebhookTest(ApiTestCase):
         "entry": [{"changes": [{"value": {
             "contacts": [{"wa_id": "573001112233", "profile": {"name": "Sofía"}}],
             "messages": [
-                {"from": "573001112233", "type": "text", "text": {"body": "Hola"}},
-                {"from": "573001112233", "type": "interactive", "interactive": {
+                {"from": "573001112233", "id": "wamid.A", "type": "text", "text": {"body": "Hola"}},
+                {"from": "573001112233", "id": "wamid.B", "type": "interactive", "interactive": {
                     "type": "button_reply", "button_reply": {"id": "opt_1", "title": "Agendar cita"}}},
                 {"from": "573001112233", "type": "audio", "audio": {"id": "x"}},
             ],
@@ -170,16 +170,31 @@ class WebhookTest(ApiTestCase):
         bad = ok.replace("s3cret-token", "wrong")
         self.assertEqual(self.call("GET", bad)[0], 403)
 
-    def test_signed_webhook_feeds_the_agent(self) -> None:
+    def post_signed(self) -> tuple[int, Any]:
         body = json.dumps(self.PAYLOAD).encode()
         signature = "sha256=" + hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
-        status, data = self.call("POST", "/webhooks/whatsapp", body, {"X-Hub-Signature-256": signature})
-        self.assertEqual((status, data), (200, {"received": 2}))
+        result = self.call("POST", "/webhooks/whatsapp", body, {"X-Hub-Signature-256": signature})
+        self.assertTrue(self.c.background.wait_idle(timeout=5))  # replies are sent after the 200
+        return result
+
+    def test_signed_webhook_feeds_the_agent(self) -> None:
+        self.assertEqual(self.post_signed(), (200, {"received": 2}))
         _, inbox = self.call("GET", "/api/conversations")
         self.assertEqual(
             inbox[0]["contact"], {"id": inbox[0]["contact"]["id"], "phone": "+573001112233", "name": "Sofía"}
         )
+        # Both messages came in one notification and were answered in order.
         self.assertEqual(inbox[0]["last_message"]["text"], "¿Qué servicio necesitas?")
+
+    def test_redelivered_webhook_is_answered_once(self) -> None:
+        self.assertEqual(self.post_signed(), (200, {"received": 2}))
+        self.assertEqual(self.post_signed(), (200, {"received": 0}))
+        _, inbox = self.call("GET", "/api/conversations")
+        _, thread = self.call("GET", f"/api/conversations/{inbox[0]['id']}")
+        self.assertEqual(
+            [m["text"] for m in thread["messages"] if m["sender"] == "customer"], ["Hola", "Agendar cita"]
+        )
+        self.assertEqual(len([m for m in thread["messages"] if m["sender"] == "bot"]), 2)
 
     def test_unsigned_webhook_is_rejected(self) -> None:
         status, _ = self.call(
