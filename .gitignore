@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+data/*.db*
+.mypy_cache/
+.ruff_cache/
+.venv/
