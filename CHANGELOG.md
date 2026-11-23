@@ -25,6 +25,11 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ### Cambiado
 
+- **La capa HTTP pasa a FastAPI y uvicorn.** Las rutas validan los cuerpos con modelos de Pydantic,
+  la API publica su esquema OpenAPI y documentación interactiva en `/api/docs`, y por encima de 64
+  peticiones simultáneas el servidor responde 503. Los errores conservan la forma
+  `{"error": {"code", "message"}}`. Ahora hay que instalar dependencias: `pip install -e .`
+  (`start.bat` lo hace solo la primera vez).
 - Las llamadas al modelo de lenguaje ya no ocurren dentro de la transacción de la base de datos:
   un cliente no espera por la respuesta de otro y el panel no se congela.
 - Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id` y
