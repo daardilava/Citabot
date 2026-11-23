@@ -1,24 +1,24 @@
 ---
-name: Error
-about: Algo no funciona como debería
+name: Bug report
+about: Something isn't working as it should
 labels: bug
 ---
 
-## Qué pasó
+## What happened
 
-## Qué esperabas
+## What you expected
 
-## Pasos para reproducirlo
+## Steps to reproduce
 
 1.
 2.
 
-## Entorno
+## Environment
 
-- Sistema operativo:
-- Versión de Python:
+- Operating system:
+- Python version:
 - `MESSAGING_PROVIDER` / `NLU_PROVIDER` / `ANSWER_PROVIDER`:
 
-## Registro de la consola
+## Console log
 
-<!-- Pega el error. Quita antes tokens, teléfonos y nombres de clientes. -->
+<!-- Paste the error. Remove tokens, phone numbers and customer names first. -->
