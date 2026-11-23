@@ -1,35 +1,35 @@
-# Cómo contribuir
+# Contributing
 
-## Preparar el entorno
+## Set up the environment
 
-La aplicación no tiene dependencias; las herramientas de desarrollo sí.
+The application has no dependencies; the development tools do.
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # Windows (en macOS/Linux: source .venv/bin/activate)
+.venv\Scripts\activate   # Windows (on macOS/Linux: source .venv/bin/activate)
 pip install -e ".[dev,llm]"
-pre-commit install              # opcional: revisa cada commit antes de crearlo
+pre-commit install       # optional: checks every commit before it is created
 ```
 
-## Flujo de trabajo
+## Workflow
 
-`main` siempre está desplegable y solo recibe cambios por *pull request*.
+`main` is always deployable and only receives changes through pull requests.
 
-1. Crea una rama desde `main` con el tipo de cambio y un nombre corto:
-   `feat/contexto-conversacion`, `fix/boton-truncado`, `chore/actualizar-ci`.
-2. Haz commits pequeños con el formato [Conventional Commits](https://www.conventionalcommits.org/es/):
+1. Create a branch from `main` named after the type of change plus a short name:
+   `feat/conversation-context`, `fix/truncated-button`, `chore/update-ci`.
+2. Make small commits using [Conventional Commits](https://www.conventionalcommits.org/en/):
 
    ```
-   feat(agent): entender «la segunda» con el contexto del chat
-   fix(whatsapp): no truncar títulos de botones de más de 20 caracteres
+   feat(agent): understand "the second one" using the chat context
+   fix(whatsapp): don't truncate button titles longer than 20 characters
    ```
 
-   Tipos en uso: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`.
-   Ámbitos habituales: `agent`, `booking`, `knowledge`, `llm`, `whatsapp`, `http`, `web`.
-3. Abre el *pull request* contra `main`. La integración continua debe quedar en verde.
-4. Se fusiona con *squash*, de modo que cada PR es un commit en `main`.
+   Types in use: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`.
+   Common scopes: `agent`, `booking`, `knowledge`, `llm`, `whatsapp`, `http`, `web`.
+3. Open the pull request against `main`. CI must be green.
+4. It is merged with *squash*, so each PR becomes one commit on `main`.
 
-## Antes de abrir el PR
+## Before opening the PR
 
 ```bash
 ruff check .
@@ -38,27 +38,27 @@ mypy
 python -m unittest discover -s tests -t .
 ```
 
-Son los mismos pasos que ejecuta la CI en Linux y Windows, con Python 3.10 y 3.13.
+These are the same steps CI runs on Linux and Windows, with Python 3.10 and 3.13.
 
-## Reglas del código
+## Code rules
 
-- **Las dependencias apuntan hacia adentro**: `domain` no importa nada del proyecto, `application`
-  solo importa `domain`, e `infrastructure` e `interfaces` implementan o usan los puertos de
-  `application/ports.py`. Solo `container.py` elige adaptadores.
-- **La agenda es determinista**: un modelo de lenguaje puede entender un mensaje o redactar una
-  respuesta, pero nunca decide si un horario está libre.
-- **La aplicación arranca sin instalar nada**: cualquier dependencia nueva es opcional y se importa
-  solo cuando su adaptador está activado.
-- **Cada cambio de comportamiento lleva su prueba.** Las pruebas no llaman a servicios externos;
-  los adaptadores de red se prueban con clientes falsos.
-- Código y comentarios en inglés; textos para el cliente y documentación en español.
+- **Dependencies point inward**: `domain` imports nothing from the project, `application`
+  only imports `domain`, and `infrastructure` and `interfaces` implement or use the ports in
+  `application/ports.py`. Only `container.py` picks adapters.
+- **Scheduling is deterministic**: a language model may understand a message or draft a reply,
+  but it never decides whether a slot is free.
+- **The app starts without installing anything**: any new dependency is optional and is imported
+  only when its adapter is enabled.
+- **Every behavior change comes with its test.** Tests never call external services;
+  network adapters are tested with fake clients.
+- Code, comments and documentation in English; customer-facing texts in Spanish.
 
-## Versiones
+## Versioning
 
-El proyecto sigue [SemVer](https://semver.org/lang/es/). Cada cambio visible se anota en
-`CHANGELOG.md` bajo «Sin publicar», y al publicar una versión se etiqueta como `vX.Y.Z`.
+The project follows [SemVer](https://semver.org/). Every visible change is noted in
+`CHANGELOG.md` under "Unreleased", and each release is tagged as `vX.Y.Z`.
 
-## Secretos
+## Secrets
 
-`.env` y `data/*.db` están en `.gitignore` y nunca se suben. Si un token llega a un commit,
-revócalo en el proveedor: borrarlo del historial no basta.
+`.env` and `data/*.db` are in `.gitignore` and are never committed. If a token ends up in a commit,
+revoke it with the provider: deleting it from the history is not enough.

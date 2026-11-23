@@ -1,58 +1,58 @@
 # Changelog
 
-Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
-[Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen
-[SemVer](https://semver.org/lang/es/).
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
+[SemVer](https://semver.org/).
 
-## [Sin publicar]
+## [Unreleased]
 
-### Añadido
+### Added
 
-- Modo oscuro en todas las páginas. Sigue la preferencia del sistema hasta que eliges uno con el
-  botón de sol/luna, y la elección se recuerda en ese navegador.
+- Dark mode on every page. It follows the system preference until you pick one with the
+  sun/moon button, and the choice is remembered in that browser.
 
-- Sitio público: página de inicio, precios, registro, inicio de sesión y página 404, con URLs
-  limpias (`/precios`, `/login`, `/registro`). El panel pasa a `/app`.
-- Cuentas: cada registro crea un negocio propio y vacío. El panel exige sesión y cada negocio solo
-  ve sus datos.
-- Sesiones en cookie `HttpOnly`, contraseñas con scrypt, bloqueo temporal tras intentos fallidos y
-  rechazo de escrituras desde otros sitios.
-- «Ver la demo» entra a la clínica de ejemplo sin contraseña; se apaga con `CITABOT_DEMO_LOGIN=0`.
+- Public site: landing page, pricing, sign-up, sign-in and 404 page, with clean
+  URLs (`/precios`, `/login`, `/registro`). The dashboard moves to `/app`.
+- Accounts: each sign-up creates its own empty business. The dashboard requires a session and each
+  business only sees its own data.
+- Sessions in an `HttpOnly` cookie, scrypt password hashing, temporary lockout after failed attempts and
+  rejection of cross-site writes.
+- "See the demo" opens the sample clinic without a password; turn it off with `CITABOT_DEMO_LOGIN=0`.
 
-- El webhook de WhatsApp guarda el mensaje, confirma a Meta de inmediato y responde en segundo
-  plano, en orden dentro de cada conversación.
-- Los mensajes que Meta reenvía se reconocen por su id y no se responden dos veces.
+- The WhatsApp webhook stores the message, acknowledges Meta immediately and replies in the
+  background, in order within each conversation.
+- Messages redelivered by Meta are recognized by their id and never answered twice.
 
-### Cambiado
+### Changed
 
-- Las llamadas al modelo de lenguaje ya no ocurren dentro de la transacción de la base de datos:
-  un cliente no espera por la respuesta de otro y el panel no se congela.
-- Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id` y
-  tablas `users` y `sessions`).
-- «Reiniciar datos de demo» solo afecta al negocio de demostración y conserva todas las cuentas.
+- Language model calls no longer happen inside the database transaction:
+  one customer never waits on another's reply and the dashboard no longer freezes.
+- Existing databases migrate themselves when opened (`messages.external_id` column and
+  `users` and `sessions` tables).
+- "Reset demo data" only affects the demo business and keeps all accounts.
 
-### Corregido
+### Fixed
 
-- La conexión con la API de Anthropic usa solo IPv4, lo que evita esperas de unos 20 s en redes
-  con IPv6 mal enrutado.
+- The connection to the Anthropic API uses IPv4 only, avoiding ~20 s waits on networks
+  with misrouted IPv6.
 
 ## [0.1.0] - 2026-11-12
 
-Primera versión: MVP navegable que corre en un solo equipo.
+First release: a runnable MVP that runs on a single machine.
 
-### Añadido
+### Added
 
-- Agente conversacional que agenda, cancela y lista citas por WhatsApp, con reglas de agenda
-  deterministas.
-- Base de conocimiento por negocio con búsqueda BM25 y paso a una persona cuando no hay respuesta.
-- Panel web: resumen, agenda, conversaciones, conocimiento, configuración y simulador de WhatsApp.
-- Recordatorios de citas del día siguiente.
-- Adaptador de WhatsApp Cloud API con verificación de firma del webhook (sin probar contra Meta).
-- Comprensión de mensajes con Claude (`NLU_PROVIDER=llm`), con respaldo en las reglas.
-- Respuestas de la base de conocimiento redactadas por Claude (`ANSWER_PROVIDER=llm`), que lee la
-  base completa cuando es pequeña y se abstiene cuando no contiene la respuesta.
-- Integración continua (lint, tipos y pruebas en Linux y Windows), plantillas de PR e issues y
-  guía de contribución.
+- Conversational agent that books, cancels and lists appointments over WhatsApp, with deterministic
+  scheduling rules.
+- Per-business knowledge base with BM25 search and handover to a human when there is no answer.
+- Web dashboard: overview, schedule, conversations, knowledge, settings and WhatsApp simulator.
+- Reminders for next-day appointments.
+- WhatsApp Cloud API adapter with webhook signature verification (not tested against Meta).
+- Message understanding with Claude (`NLU_PROVIDER=llm`), falling back to the rules.
+- Knowledge-base answers drafted by Claude (`ANSWER_PROVIDER=llm`), which reads the whole
+  base when it is small and abstains when it doesn't contain the answer.
+- Continuous integration (lint, types and tests on Linux and Windows), PR and issue templates and a
+  contributing guide.
 
-[Sin publicar]: https://github.com/daardilava/Citabot/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/daardilava/Citabot/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/daardilava/Citabot/releases/tag/v0.1.0

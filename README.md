@@ -2,68 +2,68 @@
 
 [![CI](https://github.com/daardilava/Citabot/actions/workflows/ci.yml/badge.svg)](https://github.com/daardilava/Citabot/actions/workflows/ci.yml)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
-![Sin dependencias](https://img.shields.io/badge/dependencias-ninguna-brightgreen)
+![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 
-Agente de citas y preguntas frecuentes por WhatsApp para pymes. MVP navegable que corre en tu equipo, con una clínica dental como negocio de demostración.
+WhatsApp booking and FAQ agent for small businesses. A runnable MVP that works on your own machine, with a dental clinic as the demo business. The agent talks to customers in Spanish (Latin American market).
 
-El cliente escribe por WhatsApp, el agente agenda, responde con la base de conocimiento del negocio y pasa el chat a una persona cuando no sabe. El equipo ve todo en un panel web.
+The customer writes on WhatsApp, the agent books appointments, answers from the business's knowledge base and hands the chat over to a human when it doesn't know. The team sees everything in a web dashboard.
 
-## Ejecutar
+## Run it
 
-Requiere **Python 3.10 o superior**. No hay nada que instalar: el proyecto usa solo la biblioteca estándar.
+Requires **Python 3.10 or later**. Nothing to install: the project uses only the standard library.
 
 ```bash
 python run.py
 ```
 
-En Windows también puedes hacer doble clic en `start.bat`. Luego abre <http://localhost:8000>.
+On Windows you can also double-click `start.bat`. Then open <http://localhost:8000>.
 
-La primera vez se crea `data/citabot.db` con datos de ejemplo. Para volver a ese estado, usa **Reiniciar datos de demo** en la pantalla Resumen.
+On first run, `data/citabot.db` is created with sample data. To return to that state, use **Reset demo data** on the Overview screen.
 
-### Páginas
+### Pages
 
-| Ruta | Qué es |
+| Route | What it is |
 | --- | --- |
-| `/` | Página de inicio pública: funciones, cómo funciona, planes y preguntas frecuentes. |
-| `/precios` | Planes, comparación detallada y preguntas sobre facturación. |
-| `/registro` | Crea un negocio nuevo, vacío, con su primer usuario. |
-| `/login` | Inicio de sesión. **Ver la demo** entra a la clínica de ejemplo sin contraseña. |
-| `/app` | El panel. Sin sesión, redirige a `/login`. |
+| `/` | Public landing page: features, how it works, plans and FAQ. |
+| `/precios` | Pricing: plans, detailed comparison and billing questions. |
+| `/registro` | Sign-up: creates a new, empty business with its first user. |
+| `/login` | Sign-in. **See the demo** opens the sample clinic without a password. |
+| `/app` | The dashboard. Without a session, it redirects to `/login`. |
 
-Los precios y planes son de muestra: la facturación todavía no está implementada.
+Prices and plans are placeholders: billing is not implemented yet.
 
-## Recorrido de 2 minutos
+## 2-minute tour
 
-Abre <http://localhost:8000> y pulsa **Ver la demo**.
+Open <http://localhost:8000> and click **See the demo**.
 
-1. **Simulador de WhatsApp** (abajo a la izquierda). Envía «Hola» y agenda una cita con los botones, o escribe todo de una vez: «Quiero agendar una limpieza mañana a las 9».
-2. **Agenda**. La cita aparece con la etiqueta WhatsApp. Pulsa **Enviar recordatorios de mañana** y vuelve al simulador para verlo llegar.
-3. En el simulador pregunta «¿Tienen parqueadero?» (responde con la base de conocimiento) y «¿Hacen carillas de porcelana?» (no lo sabe y ofrece pasar a una persona).
-4. **Conversaciones**. El chat queda marcado *Por atender*. Responde como equipo: el bot se pausa. Devuélvele el chat con **Devolver al bot**.
-5. **Conocimiento**. Agrega un documento sobre carillas y repite la pregunta: ahora el agente responde.
-6. **Configuración**. Cambia horarios o servicios; el agente los usa en el siguiente mensaje.
+1. **WhatsApp simulator** (bottom left). Send "Hola" and book an appointment with the buttons, or type it all at once: "Quiero agendar una limpieza mañana a las 9" (*I'd like to book a cleaning tomorrow at 9*).
+2. **Schedule**. The appointment shows up with the WhatsApp tag. Click **Send tomorrow's reminders** and go back to the simulator to see it arrive.
+3. In the simulator ask "¿Tienen parqueadero?" (*Do you have parking?*) — it answers from the knowledge base — and "¿Hacen carillas de porcelana?" (*Do you do porcelain veneers?*) — it doesn't know and offers a human.
+4. **Conversations**. The chat is flagged *Needs attention*. Reply as the team: the bot pauses. Hand the chat back with **Return to bot**.
+5. **Knowledge**. Add a document about veneers and ask again: now the agent answers.
+6. **Settings**. Change opening hours or services; the agent uses them on the next message.
 
-## Arquitectura
+## Architecture
 
-Arquitectura hexagonal (puertos y adaptadores). Las dependencias apuntan siempre hacia adentro.
+Hexagonal architecture (ports and adapters). Dependencies always point inward.
 
 ```
-            Navegador (panel + simulador)        Meta (WhatsApp Cloud API)
+           Browser (dashboard + simulator)      Meta (WhatsApp Cloud API)
                         │  JSON                          │  webhook
                         ▼                                ▼
- interfaces/http   ── rutas delgadas: validar, llamar un caso de uso, serializar
+ interfaces/http   ── thin routes: validate, call a use case, serialize
                         │
                         ▼
- application       ── casos de uso: AgentService, BookingService, KnowledgeService,
+ application       ── use cases: AgentService, BookingService, KnowledgeService,
                       InboxService, ReminderService, BusinessService
-                      + ports.py (interfaces que la aplicación necesita)
+                      + ports.py (interfaces the application needs)
                         │
                         ▼
- domain            ── entidades, reglas puras de agenda, errores
+ domain            ── entities, pure scheduling rules, errors
 
- infrastructure    ── adaptadores que implementan los puertos:
+ infrastructure    ── adapters that implement the ports:
                       sqlite/ · nlu/rules · retrieval/bm25 · messaging/ · clock
- container.py      ── raíz de composición: el único lugar que elige adaptadores
+ container.py      ── composition root: the only place that picks adapters
 ```
 
 ```
@@ -74,79 +74,79 @@ src/citabot/
   infrastructure/    sqlite/ · nlu/ · retrieval/ · messaging/ · clock.py · seed.py
   interfaces/http/   framework.py · server.py · api.py · schemas.py
   config.py · container.py · __main__.py
-web/                 index.html · css/ · js/ (módulos ES, sin build)
-tests/               unittest: dominio, intérprete, agente y API de punta a punta
+web/                 index.html · css/ · js/ (ES modules, no build step)
+tests/               unittest: domain, interpreter, agent and end-to-end API
 ```
 
-### Decisiones de diseño
+### Design decisions
 
-| Decisión | Por qué |
+| Decision | Why |
 | --- | --- |
-| **Las reglas de agenda son deterministas** | Un modelo de lenguaje nunca decide si un horario está libre. El agente entiende el mensaje y delega la reserva a `BookingService`, que valida y escribe en una sola transacción. |
-| **El agente responde solo con lo recuperado** | `KnowledgeService` contesta si la recuperación supera un umbral de confianza. Si no, marca el chat *Por atender* y ofrece una persona. No inventa. |
-| **Puertos para todo lo reemplazable** | `MessageInterpreter`, `PassageRetriever`, `AnswerGenerator`, `MessagingGateway` y los repositorios son `Protocol`. Cambiar reglas por un LLM, BM25 por embeddings o SQLite por Postgres es escribir un adaptador. |
-| **El simulador y el webhook usan el mismo caso de uso** | Ambos pasan por `AgentService`. Lo que pruebas en el simulador es lo que correrá con WhatsApp real. |
-| **Recibir y responder son dos pasos** | `receive` guarda el mensaje en una transacción corta y el webhook confirma a Meta de inmediato; `respond` corre en segundo plano. Un mensaje reenviado se reconoce por su id y no se responde dos veces. |
-| **El modelo nunca corre dentro de una transacción** | Entender el mensaje y redactar la respuesta ocurren sin el bloqueo de la base de datos, así que un cliente no espera por la llamada al modelo de otro. El diálogo, que es determinista, sí corre en una transacción; si necesita una respuesta de conocimiento, se deshace, se consulta y se repite. |
-| **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. `tenant()` en `api.py` lo toma de la sesión, así que ninguna ruta del panel responde sin sesión ni alcanza datos de otro negocio. |
-| **Sin dependencias externas** | Arranca con `python run.py` en cualquier equipo. El costo: un mini-router propio en `framework.py` en vez de FastAPI. Las rutas no contienen lógica, así que migrar es mecánico. |
-| **Frontend sin build** | Módulos ES nativos y un helper `h()` que solo escribe con `textContent`, de modo que un mensaje de cliente no puede inyectar HTML. |
-| **Colores como tokens** | Todo color es una variable CSS con valor claro y oscuro. `theme.js` se carga en el `<head>` para aplicar el tema antes de pintar, y una prueba exige que cada token claro tenga su versión oscura. |
+| **Scheduling rules are deterministic** | A language model never decides whether a slot is free. The agent understands the message and delegates the booking to `BookingService`, which validates and writes in a single transaction. |
+| **The agent only answers from what it retrieved** | `KnowledgeService` answers only if retrieval clears a confidence threshold. Otherwise it flags the chat *Needs attention* and offers a human. It doesn't make things up. |
+| **Ports for everything replaceable** | `MessageInterpreter`, `PassageRetriever`, `AnswerGenerator`, `MessagingGateway` and the repositories are `Protocol`s. Swapping rules for an LLM, BM25 for embeddings or SQLite for Postgres means writing one adapter. |
+| **Simulator and webhook share the same use case** | Both go through `AgentService`. What you test in the simulator is what will run on real WhatsApp. |
+| **Receiving and replying are two steps** | `receive` stores the message in a short transaction and the webhook acknowledges Meta immediately; `respond` runs in the background. A redelivered message is recognized by its id and never answered twice. |
+| **The model never runs inside a transaction** | Understanding the message and drafting the reply happen outside the database lock, so one customer never waits on another customer's model call. The deterministic dialogue does run in a transaction; if it needs a knowledge answer, it rolls back, queries and retries. |
+| **Multi-tenant by design** | Every record hangs off `business_id` and every use case receives it. `tenant()` in `api.py` takes it from the session, so no dashboard route answers without a session or reaches another business's data. |
+| **No external dependencies** | Starts with `python run.py` on any machine. The trade-off: a small custom router in `framework.py` instead of FastAPI. Routes contain no logic, so migrating is mechanical. |
+| **No-build frontend** | Native ES modules and an `h()` helper that only writes via `textContent`, so a customer message can't inject HTML. |
+| **Colors as tokens** | Every color is a CSS variable with a light and a dark value. `theme.js` loads in the `<head>` to apply the theme before first paint, and a test requires every light token to have a dark counterpart. |
 
-### Seguridad incluida
+### Security built in
 
-- El servidor escucha solo en `127.0.0.1`.
-- Contraseñas con scrypt y sal por usuario. Sesiones en cookie `HttpOnly` y `SameSite=Lax`, guardadas en la base solo como hash; expiran a los 14 días.
-- Inicio de sesión con la misma respuesta para correo inexistente y contraseña errónea, y bloqueo temporal tras 5 intentos fallidos por correo.
-- Las escrituras a `/api/` desde otro origen se rechazan (protección CSRF).
-- **Ver la demo** entra sin contraseña al negocio de ejemplo. Apágalo con `CITABOT_DEMO_LOGIN=0` antes de exponer el servidor, y activa `CITABOT_COOKIE_SECURE=1` detrás de HTTPS.
-- Verificación de firma `X-Hub-Signature-256` en el webhook y comparación en tiempo constante del token.
-- Consultas SQL parametrizadas, límite de 1 MB por petición, protección contra *path traversal* en archivos estáticos.
-- Cabeceras `Content-Security-Policy`, `X-Frame-Options` y `X-Content-Type-Options`.
+- The server listens on `127.0.0.1` only.
+- Passwords hashed with scrypt and a per-user salt. Sessions in an `HttpOnly`, `SameSite=Lax` cookie, stored in the database only as a hash; they expire after 14 days.
+- Sign-in returns the same response for an unknown email and a wrong password, with a temporary lockout after 5 failed attempts per email.
+- Cross-origin writes to `/api/` are rejected (CSRF protection).
+- **See the demo** opens the sample business without a password. Turn it off with `CITABOT_DEMO_LOGIN=0` before exposing the server, and set `CITABOT_COOKIE_SECURE=1` behind HTTPS.
+- `X-Hub-Signature-256` signature verification on the webhook and constant-time token comparison.
+- Parameterized SQL queries, a 1 MB request limit, and path-traversal protection for static files.
+- `Content-Security-Policy`, `X-Frame-Options` and `X-Content-Type-Options` headers.
 
-## Pruebas
+## Tests
 
 ```bash
 python -m unittest discover -s tests -t .
 ```
 
-63 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. 
+63 tests: scheduling rules, the Spanish message interpreter, LLM adapters (with a fake client), message intake (duplicates, concurrency, migration), full agent flows, and the HTTP API against a real server on a free port.
 
-La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff` y `mypy --strict`. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
+CI runs these tests on Linux and Windows with Python 3.10 and 3.13, plus `ruff` and `mypy --strict`. Branching, commit format and environment setup are in [CONTRIBUTING.md](CONTRIBUTING.md); release history is in [CHANGELOG.md](CHANGELOG.md).
 
-## Entender los mensajes con un LLM
+## Understanding messages with an LLM
 
-Por defecto el agente entiende los mensajes con reglas. Para usar Claude en el puerto `MessageInterpreter`:
+By default the agent understands messages with rules. To use Claude for the `MessageInterpreter` port:
 
 1. `pip install anthropic`
-2. En `.env`: `NLU_PROVIDER=llm` y `ANTHROPIC_API_KEY=...`
-3. Reinicia con `python run.py`.
+2. In `.env`: `NLU_PROVIDER=llm` and `ANTHROPIC_API_KEY=...`
+3. Restart with `python run.py`.
 
-El modelo solo lee el mensaje (intención, día, hora, sí/no); la agenda sigue siendo determinista. Si la llamada falla, el agente usa las reglas y deja un aviso en la consola. El modelo se cambia con `CITABOT_LLM_MODEL`.
+The model only reads the message (intent, day, time, yes/no); scheduling stays deterministic. If the call fails, the agent falls back to the rules and logs a warning to the console. Change the model with `CITABOT_LLM_MODEL`.
 
-Con `ANSWER_PROVIDER=llm`, Claude también redacta las respuestas de la base de conocimiento (puerto `AnswerGenerator`) usando solo los fragmentos recuperados. Si los fragmentos no contestan la pregunta, el chat pasa a una persona; si la llamada falla, se cita el fragmento como antes. Los dos interruptores son independientes.
+With `ANSWER_PROVIDER=llm`, Claude also drafts knowledge-base answers (`AnswerGenerator` port) using only the retrieved passages. If the passages don't answer the question, the chat goes to a human; if the call fails, the passage is quoted as before. The two switches are independent.
 
-Mientras la base de conocimiento sea pequeña (hasta `CITABOT_WHOLE_BASE_MAX_CHARS`, 12.000 caracteres por defecto), Claude la recibe completa en cada pregunta, así que responde aunque el cliente use otras palabras («¿dónde dejo el carro?» encuentra el documento del parqueadero). Por encima de ese tamaño vuelve la búsqueda BM25 con su umbral de confianza.
+While the knowledge base is small (up to `CITABOT_WHOLE_BASE_MAX_CHARS`, 12,000 characters by default), Claude receives all of it with every question, so it answers even when the customer uses different words ("¿dónde dejo el carro?" — *where do I leave the car?* — finds the parking document). Above that size, BM25 search with its confidence threshold takes over again.
 
-## Conectar WhatsApp real
+## Connecting real WhatsApp
 
-El adaptador `infrastructure/messaging/whatsapp_cloud.py` está escrito pero **no se ha probado contra los servidores de Meta**. Revisa los *payloads* contra la referencia actual de la Cloud API antes de usarlo.
+The `infrastructure/messaging/whatsapp_cloud.py` adapter is written but **has not been tested against Meta's servers**. Check the payloads against the current Cloud API reference before using it.
 
-1. Crea una app en Meta for Developers con el producto WhatsApp y un número de prueba.
-2. Copia `.env.example` a `.env` y completa `MESSAGING_PROVIDER=whatsapp_cloud`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` y `WHATSAPP_APP_SECRET`.
-3. Expón el puerto con un túnel HTTPS (por ejemplo `cloudflared tunnel --url http://localhost:8000`).
-4. En Meta, configura el webhook en `https://TU-TUNEL/webhooks/whatsapp` con el mismo *verify token* y suscríbete al campo `messages`.
+1. Create an app in Meta for Developers with the WhatsApp product and a test number.
+2. Copy `.env.example` to `.env` and fill in `MESSAGING_PROVIDER=whatsapp_cloud`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` and `WHATSAPP_APP_SECRET`.
+3. Expose the port with an HTTPS tunnel (for example `cloudflared tunnel --url http://localhost:8000`).
+4. In Meta, set the webhook to `https://YOUR-TUNNEL/webhooks/whatsapp` with the same verify token and subscribe to the `messages` field.
 
-Los recordatorios se envían fuera de la ventana de 24 horas, así que en producción deben ser **plantillas de utilidad aprobadas**; hoy salen como texto libre.
+Reminders are sent outside the 24-hour window, so in production they must be **approved utility templates**; today they go out as free text.
 
-## Qué falta para producción
+## Roadmap to production
 
-Ordenado por lo que bloquea antes a un primer cliente de pago.
+Ordered by what would block a first paying customer soonest.
 
-1. **Un número de WhatsApp por negocio**: las cuentas y el panel ya separan negocios, pero el webhook entrega todos los mensajes al negocio de demostración. Falta Embedded Signup para que cada negocio conecte su número y enrutar por `phone_number_id`. También faltan invitar compañeros, recuperar contraseña y verificar el correo.
-2. **Cola duradera**: el webhook ya confirma de inmediato y descarta reenvíos, pero las respuestas pendientes viven en memoria. Si el proceso se detiene entre guardar un mensaje y responderlo, ese mensaje queda sin respuesta. Falta también manejar los estados de entrega.
-3. **Postgres** en lugar de SQLite, con una restricción de exclusión para los solapes de citas.
-4. **LLM en dos puertos**: `MessageInterpreter` (salida estructurada) y `AnswerGenerator` (respuesta redactada con los pasajes como contexto). Recuperación híbrida con embeddings cuando crezca el corpus.
-5. **Zonas horarias**: hoy las horas son locales del servidor. Guardar UTC y convertir con la zona del negocio.
-6. **Varios profesionales o sillas** por negocio; hoy hay una sola agenda.
-7. **Planificador** para recordatorios, facturación por suscripción y métricas por negocio.
+1. **One WhatsApp number per business**: accounts and the dashboard already separate businesses, but the webhook delivers every message to the demo business. Embedded Signup is needed so each business connects its own number, plus routing by `phone_number_id`. Inviting teammates, password reset and email verification are also missing.
+2. **Durable queue**: the webhook already acknowledges immediately and drops redeliveries, but pending replies live in memory. If the process stops between storing a message and answering it, that message goes unanswered. Delivery-status handling is also missing.
+3. **Postgres** instead of SQLite, with an exclusion constraint for overlapping appointments.
+4. **LLM on both ports**: `MessageInterpreter` (structured output) and `AnswerGenerator` (drafted answer with passages as context). Hybrid retrieval with embeddings once the corpus grows.
+5. **Time zones**: times are currently server-local. Store UTC and convert with the business's time zone.
+6. **Multiple practitioners or chairs** per business; today there is a single schedule.
+7. **Scheduler** for reminders, subscription billing and per-business metrics.
