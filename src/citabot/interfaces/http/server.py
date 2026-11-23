@@ -94,6 +94,10 @@ def make_handler(
             self._send(response, cacheable=not is_api)
 
         def _dispatch(self, path: str, query: str) -> Response:
+            # Read the body before anything can refuse the request: closing a socket
+            # with unread data resets the connection, and the reset can wipe out the
+            # error response before the client reads it.
+            body = self._read_body()
             handler, params = router.resolve(self.command, path)
             # CSRF: a browser names the page that sent a write request. Refuse the
             # ones that come from another site (the session cookie is SameSite=Lax too).
@@ -105,23 +109,28 @@ def make_handler(
                 and urlsplit(origin).netloc != self.headers.get("Host")
             ):
                 raise HttpError(403, "cross_site_request", "Solicitud de otro sitio rechazada.")
-            try:
-                length = int(self.headers.get("Content-Length") or 0)
-            except ValueError as exc:
-                raise HttpError(400, "bad_request", "Content-Length inválido.") from exc
-            if length > MAX_BODY_BYTES:
-                self.close_connection = True
-                raise HttpError(413, "payload_too_large", "El cuerpo supera 1 MB.")
             request = Request(
                 method=self.command,
                 path=path,
                 query=dict(parse_qsl(query)),
                 headers={k.lower(): v for k, v in self.headers.items()},
-                body=self.rfile.read(length) if length > 0 else b"",
+                body=body,
                 params=params,
                 client=self._client(),
             )
             return handler(request)
+
+        def _read_body(self) -> bytes:
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError as exc:
+                self.close_connection = True
+                raise HttpError(400, "bad_request", "Content-Length inválido.") from exc
+            if length > MAX_BODY_BYTES:
+                # Too big to read; the connection is closed instead of drained.
+                self.close_connection = True
+                raise HttpError(413, "payload_too_large", "El cuerpo supera 1 MB.")
+            return self.rfile.read(length) if length > 0 else b""
 
         def _client(self) -> str:
             """The caller's IP. Behind a reverse proxy the socket only shows the proxy,
