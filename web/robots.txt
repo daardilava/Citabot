@@ -1,0 +1,4 @@
+# The panel (/app) is not blocked here on purpose: it carries a noindex tag,
+# and crawlers only see that tag if they are allowed to fetch the page.
+User-agent: *
+Disallow: /api/

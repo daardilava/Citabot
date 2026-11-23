@@ -48,5 +48,38 @@ class ThemeTest(unittest.TestCase):
                 self.assertIn("data-theme-toggle", html)
 
 
+class SearchEngineTest(unittest.TestCase):
+    PUBLIC = ("index.html", "precios.html", "login.html", "registro.html")
+    PRIVATE = ("app.html", "404.html")
+
+    def head(self, name: str) -> str:
+        return (WEB / name).read_text(encoding="utf-8").split("</head>", 1)[0]
+
+    def test_public_pages_describe_themselves_and_stay_indexable(self) -> None:
+        for name in self.PUBLIC:
+            with self.subTest(page=name):
+                head = self.head(name)
+                self.assertRegex(head, r'<meta name="description" content="[^"]{50,160}" />')
+                self.assertNotIn('name="robots"', head)
+
+    def test_marketing_pages_have_social_previews(self) -> None:
+        for name in ("index.html", "precios.html"):
+            with self.subTest(page=name):
+                head = self.head(name)
+                for prop in ("og:title", "og:description", "og:type", "og:locale"):
+                    self.assertIn(f'property="{prop}"', head)
+
+    def test_the_panel_and_the_404_page_are_not_indexed(self) -> None:
+        for name in self.PRIVATE:
+            with self.subTest(page=name):
+                self.assertIn('<meta name="robots" content="noindex" />', self.head(name))
+
+    def test_robots_txt_keeps_crawlers_out_of_the_api_only(self) -> None:
+        rules = (WEB / "robots.txt").read_text(encoding="utf-8")
+        self.assertIn("Disallow: /api/", rules)
+        # Blocking /app would hide its noindex tag from crawlers.
+        self.assertNotRegex(rules, r"Disallow: /app")
+
+
 if __name__ == "__main__":
     unittest.main()

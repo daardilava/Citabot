@@ -206,6 +206,11 @@ class SecurityHeadersTest(ApiTestCase):
                 self.assertEqual(sent["X-Frame-Options"], "DENY")
                 self.assertIsNone(sent["Strict-Transport-Security"])  # plain HTTP here
 
+    def test_robots_txt_is_served_as_plain_text(self) -> None:
+        with urllib.request.urlopen(self.base + "/robots.txt", timeout=5) as response:
+            self.assertEqual(response.headers["Content-Type"], "text/plain; charset=utf-8")
+            self.assertIn(b"Disallow: /api/", response.read())
+
     def test_health_does_not_reveal_the_configuration(self) -> None:
         self.assertEqual(self.call("GET", "/api/health")[1], {"status": "ok", "demo_login": True})
 

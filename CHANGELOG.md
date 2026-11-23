@@ -8,6 +8,8 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ### Añadido
 
+- SEO básico: `robots.txt`, descripción en inicio de sesión y registro, vistas previas para redes
+  sociales (Open Graph) en inicio y precios, y `noindex` en el panel y la página 404.
 - Modo oscuro en todas las páginas. Sigue la preferencia del sistema hasta que eliges uno con el
   botón de sol/luna, y la elección se recuerda en ese navegador.
 
