@@ -48,6 +48,8 @@ class Settings:
     demo_login: bool = True
     # Send the session cookie only over HTTPS. Turn it on behind TLS.
     cookie_secure: bool = False
+    # Behind a reverse proxy, read the client IP from X-Forwarded-For.
+    trust_proxy: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -80,4 +82,5 @@ class Settings:
             llm_ipv4_only=env("CITABOT_LLM_IPV4_ONLY", "1") != "0",
             demo_login=env("CITABOT_DEMO_LOGIN", "1") != "0",
             cookie_secure=env("CITABOT_COOKIE_SECURE", "0") == "1",
+            trust_proxy=env("CITABOT_TRUST_PROXY", "0") == "1",
         )

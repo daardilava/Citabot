@@ -156,6 +156,20 @@ class BusinessRepository(Protocol):
     def save_service(self, service: Service) -> None: ...
 
 
+class DemoSeeder(Protocol):
+    """Creates and removes the throwaway businesses behind «Ver la demo»."""
+
+    def create(self, now: datetime, expires_at: datetime) -> User:
+        """A new business full of sample data, and the passwordless user who owns it."""
+        ...
+
+    def reset(self, business_id: int, now: datetime) -> None: ...
+
+    def purge_expired(self, now: datetime) -> int:
+        """Delete demo businesses past their expiry. Returns how many."""
+        ...
+
+
 class ContactRepository(Protocol):
     def get(self, contact_id: int) -> Contact: ...
     def find_by_phone(self, business_id: int, phone: str) -> Contact | None: ...

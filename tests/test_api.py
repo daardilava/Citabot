@@ -21,7 +21,14 @@ class ApiTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.c = support.make_container(**self.settings_overrides)
-        self.server = create_server("127.0.0.1", 0, build_router(self.c), self.c.settings.web_dir)
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            build_router(self.c),
+            self.c.settings.web_dir,
+            trust_proxy=self.c.settings.trust_proxy,
+            https=self.c.settings.cookie_secure,
+        )
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.addCleanup(self.c.close)
@@ -87,11 +94,13 @@ class ApiTest(ApiTestCase):
         self.assertEqual((status, data["mode"]), (200, "bot"))
 
     def test_booking_from_the_dashboard_and_double_booking(self) -> None:
-        _, availability = self.call("GET", "/api/availability?service_id=2&date=2026-11-13")
+        _, services = self.call("GET", "/api/services")
+        cleaning = next(x["id"] for x in services if x["name"] == "Limpieza dental")
+        _, availability = self.call("GET", f"/api/availability?service_id={cleaning}&date=2026-11-13")
         self.assertIn("2026-11-13T09:00:00", availability["slots"])
         self.assertNotIn("2026-11-13T10:00:00", availability["slots"])  # taken in the demo data
 
-        body = {"phone": "+57 2", "name": "Luis", "service_id": 2, "starts_at": "2026-11-13T09:00"}
+        body = {"phone": "+57 2", "name": "Luis", "service_id": cleaning, "starts_at": "2026-11-13T09:00"}
         status, created = self.call("POST", "/api/appointments", body)
         self.assertEqual((status, created["source"]), (201, "dashboard"))
         status, error = self.call("POST", "/api/appointments", body)
@@ -180,6 +189,36 @@ class ApiTest(ApiTestCase):
         self.assertEqual(len(self.call("GET", "/api/conversations")[1]), 3)
 
 
+class SecurityHeadersTest(ApiTestCase):
+    signed_in = False
+
+    def headers(self, path: str) -> Any:
+        with urllib.request.urlopen(self.base + path, timeout=5) as response:
+            return response.headers
+
+    def test_every_response_carries_the_security_headers(self) -> None:
+        for path in ("/", "/api/health"):
+            with self.subTest(path=path):
+                sent = self.headers(path)
+                policy = sent["Content-Security-Policy"]
+                for directive in ("default-src 'self'", "object-src 'none'", "base-uri 'none'"):
+                    self.assertIn(directive, policy)
+                self.assertEqual(sent["X-Frame-Options"], "DENY")
+                self.assertIsNone(sent["Strict-Transport-Security"])  # plain HTTP here
+
+    def test_health_does_not_reveal_the_configuration(self) -> None:
+        self.assertEqual(self.call("GET", "/api/health")[1], {"status": "ok", "demo_login": True})
+
+
+class HstsTest(ApiTestCase):
+    signed_in = False
+    settings_overrides: ClassVar[dict[str, object]] = {"cookie_secure": True}
+
+    def test_hsts_is_sent_when_served_over_https(self) -> None:
+        with urllib.request.urlopen(self.base + "/", timeout=5) as response:
+            self.assertIn("max-age=", response.headers["Strict-Transport-Security"])
+
+
 class WebhookTest(ApiTestCase):
     settings_overrides: ClassVar[dict[str, object]] = {
         "whatsapp_verify_token": "s3cret-token",
@@ -211,30 +250,43 @@ class WebhookTest(ApiTestCase):
         self.assertTrue(self.c.background.wait_idle(timeout=5))  # replies are sent after the 200
         return result
 
+    # Until each business connects its own number, the webhook delivers to the sample business.
+    def latest_chat(self) -> tuple[Any, list[Any]]:
+        business_id = self.c.settings.default_business_id
+        summary = self.c.inbox.list(business_id)[0]
+        return summary, self.c.inbox.thread(business_id, summary.conversation.id).messages
+
     def test_signed_webhook_feeds_the_agent(self) -> None:
         self.assertEqual(self.post_signed(), (200, {"received": 2}))
-        _, inbox = self.call("GET", "/api/conversations")
-        self.assertEqual(
-            inbox[0]["contact"], {"id": inbox[0]["contact"]["id"], "phone": "+573001112233", "name": "Sofía"}
-        )
+        summary, _ = self.latest_chat()
+        self.assertEqual((summary.contact.phone, summary.contact.name), ("+573001112233", "Sofía"))
         # Both messages came in one notification and were answered in order.
-        self.assertEqual(inbox[0]["last_message"]["text"], "¿Qué servicio necesitas?")
+        assert summary.last_message is not None
+        self.assertEqual(summary.last_message.text, "¿Qué servicio necesitas?")
 
     def test_redelivered_webhook_is_answered_once(self) -> None:
         self.assertEqual(self.post_signed(), (200, {"received": 2}))
         self.assertEqual(self.post_signed(), (200, {"received": 0}))
-        _, inbox = self.call("GET", "/api/conversations")
-        _, thread = self.call("GET", f"/api/conversations/{inbox[0]['id']}")
-        self.assertEqual(
-            [m["text"] for m in thread["messages"] if m["sender"] == "customer"], ["Hola", "Agendar cita"]
-        )
-        self.assertEqual(len([m for m in thread["messages"] if m["sender"] == "bot"]), 2)
+        _, messages = self.latest_chat()
+        self.assertEqual([m.text for m in messages if m.sender.value == "customer"], ["Hola", "Agendar cita"])
+        self.assertEqual(len([m for m in messages if m.sender.value == "bot"]), 2)
 
     def test_unsigned_webhook_is_rejected(self) -> None:
         status, _ = self.call(
             "POST", "/webhooks/whatsapp", self.PAYLOAD, {"X-Hub-Signature-256": "sha256=00"}
         )
         self.assertEqual(status, 401)
+
+
+class WebhookWithoutSecretTest(ApiTestCase):
+    signed_in = False
+
+    def test_webhook_stays_closed_without_an_app_secret(self) -> None:
+        # Even in simulator mode: otherwise anyone could post messages to the agent.
+        status, data = self.call("POST", "/webhooks/whatsapp", WebhookTest.PAYLOAD)
+        self.assertEqual((status, data["error"]["code"]), (503, "not_configured"))
+        phones = {x.contact.phone for x in self.c.inbox.list(self.c.settings.default_business_id)}
+        self.assertNotIn("+573001112233", phones)
 
 
 if __name__ == "__main__":

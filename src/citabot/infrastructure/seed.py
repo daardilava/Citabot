@@ -5,6 +5,7 @@ Dates are relative to "now" so the dashboard always looks alive.
 
 from __future__ import annotations
 
+import secrets
 from datetime import date, datetime, time, timedelta
 
 from citabot.domain.models import (
@@ -16,6 +17,7 @@ from citabot.domain.models import (
     OpeningHours,
     Sender,
     TimeRange,
+    User,
 )
 
 from .security import UNUSABLE_PASSWORD
@@ -28,8 +30,6 @@ from .sqlite.repositories import (
     SqliteKnowledgeRepository,
     SqliteUserRepository,
 )
-
-DEMO_EMAIL = "demo@citabot.local"
 
 _WEEKDAY_HOURS = [TimeRange(time(8), time(12)), TimeRange(time(14), time(18))]
 _SATURDAY_HOURS = [TimeRange(time(9), time(13))]
@@ -108,33 +108,74 @@ def _hours() -> OpeningHours:
     return dict.fromkeys(range(5), _WEEKDAY_HOURS) | {5: _SATURDAY_HOURS}
 
 
+DEMO_TEAM_NAME = "Equipo Sonrisa"
+# Demo accounts get an address on a domain nobody can own, so they never collide
+# with a real sign-up and never receive mail.
+DEMO_EMAIL_DOMAIN = "demo.citabot.invalid"
+
+
 def seed_demo(db: Database, now: datetime) -> int:
-    """Insert the demo business with its content and its demo user. Returns the business id."""
+    """Insert the sample business on first run. Returns its id.
+
+    It is the business the WhatsApp webhook delivers to until each business
+    connects its own number; nobody signs in to it through «Ver la demo».
+    """
     with db:
         business = SqliteBusinessRepository(db).add(_NAME, _VERTICAL, _WELCOME, _SLOT_MINUTES, _hours())
-        ensure_demo_user(db, business.id, now)
         _fill(db, business, now)
         return business.id
 
 
-def reset_demo(db: Database, business_id: int, now: datetime) -> None:
-    """Put the demo business back to its first-run state. Its users are kept."""
+# Before each visitor got a private demo, everyone signed in to the sample
+# business through this one shared account.
+LEGACY_DEMO_EMAIL = "demo@citabot.local"
+
+
+def remove_legacy_demo_account(db: Database) -> None:
+    """Delete the old shared demo account and its sessions, so browsers still
+    holding one are signed out instead of staying in the shared business."""
     with db:
-        db.clear_business(business_id)
-        businesses = SqliteBusinessRepository(db)
-        business = businesses.get(business_id)
-        business.name, business.vertical, business.welcome_message = _NAME, _VERTICAL, _WELCOME
-        business.slot_minutes, business.opening_hours = _SLOT_MINUTES, _hours()
-        businesses.save(business)
-        _fill(db, business, now)
+        db.execute(
+            "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email = ?)",
+            (LEGACY_DEMO_EMAIL,),
+        )
+        db.execute("DELETE FROM users WHERE email = ?", (LEGACY_DEMO_EMAIL,))
 
 
-def ensure_demo_user(db: Database, business_id: int, now: datetime) -> None:
-    """The account behind «Ver la demo». It has no password: it can only be entered
-    through the demo sign-in, which the DEMO_LOGIN setting turns off."""
-    users = SqliteUserRepository(db)
-    if users.find_by_email(DEMO_EMAIL) is None:
-        users.add(business_id, DEMO_EMAIL, "Equipo Sonrisa", UNUSABLE_PASSWORD, now)
+class SqliteDemoSeeder:
+    """Every visitor of «Ver la demo» gets a private copy of the sample business."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(self, now: datetime, expires_at: datetime) -> User:
+        with self._db:
+            business = SqliteBusinessRepository(self._db).add(
+                _NAME, _VERTICAL, _WELCOME, _SLOT_MINUTES, _hours(), demo_expires_at=expires_at
+            )
+            _fill(self._db, business, now)
+            email = f"demo-{secrets.token_hex(8)}@{DEMO_EMAIL_DOMAIN}"
+            # No password: the account is only reachable through the demo sign-in.
+            return SqliteUserRepository(self._db).add(
+                business.id, email, DEMO_TEAM_NAME, UNUSABLE_PASSWORD, now
+            )
+
+    def reset(self, business_id: int, now: datetime) -> None:
+        """Put a demo business back to its first state. Its users are kept."""
+        with self._db:
+            self._db.clear_business(business_id)
+            businesses = SqliteBusinessRepository(self._db)
+            business = businesses.get(business_id)
+            business.name, business.vertical, business.welcome_message = _NAME, _VERTICAL, _WELCOME
+            business.slot_minutes, business.opening_hours = _SLOT_MINUTES, _hours()
+            businesses.save(business)
+            _fill(self._db, business, now)
+
+    def purge_expired(self, now: datetime) -> int:
+        expired = SqliteBusinessRepository(self._db).list_expired_demos(now)
+        for business_id in expired:
+            self._db.delete_business(business_id)
+        return len(expired)
 
 
 def _fill(db: Database, business: Business, now: datetime) -> None:

@@ -56,6 +56,7 @@ def _business(row: sqlite3.Row) -> Business:
         welcome_message=row["welcome_message"],
         slot_minutes=row["slot_minutes"],
         opening_hours=_load_hours(row["opening_hours"]),
+        demo_expires_at=(datetime.fromisoformat(row["demo_expires_at"]) if row["demo_expires_at"] else None),
     )
 
 
@@ -146,14 +147,35 @@ class SqliteBusinessRepository:
         return _business(row)
 
     def add(
-        self, name: str, vertical: str, welcome_message: str, slot_minutes: int, hours: OpeningHours
+        self,
+        name: str,
+        vertical: str,
+        welcome_message: str,
+        slot_minutes: int,
+        hours: OpeningHours,
+        demo_expires_at: datetime | None = None,
     ) -> Business:
         business_id = self._db.execute(
-            "INSERT INTO businesses (name, vertical, welcome_message, slot_minutes, opening_hours) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (name, vertical, welcome_message, slot_minutes, _dump_hours(hours)),
+            "INSERT INTO businesses "
+            "(name, vertical, welcome_message, slot_minutes, opening_hours, demo_expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                name,
+                vertical,
+                welcome_message,
+                slot_minutes,
+                _dump_hours(hours),
+                _iso(demo_expires_at) if demo_expires_at else None,
+            ),
         )
         return self.get(business_id)
+
+    def list_expired_demos(self, now: datetime) -> list[int]:
+        rows = self._db.query(
+            "SELECT id FROM businesses WHERE demo_expires_at IS NOT NULL AND demo_expires_at <= ?",
+            (_iso(now),),
+        )
+        return [row["id"] for row in rows]
 
     def exists_any(self) -> bool:
         return self._db.query_one("SELECT 1 FROM businesses LIMIT 1") is not None

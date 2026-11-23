@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import timedelta
+from pathlib import Path
 from typing import ClassVar
 
-from citabot.application.auth import MAX_FAILED_LOGINS, SESSION_TTL
-from citabot.domain.errors import AuthenticationError, RateLimitedError, ValidationError
+from citabot.application.auth import (
+    MAX_FAILED_LOGINS,
+    MAX_FAILED_LOGINS_PER_CLIENT,
+    MAX_SIGNUPS_PER_CLIENT,
+    SESSION_TTL,
+)
+from citabot.application.demo import DEMO_TTL, MAX_DEMOS_PER_CLIENT
+from citabot.domain.errors import (
+    AuthenticationError,
+    RateLimitedError,
+    ValidationError,
+)
 from citabot.infrastructure.clock import FixedClock
 from citabot.infrastructure.security import UNUSABLE_PASSWORD, ScryptHasher
-from citabot.infrastructure.seed import DEMO_EMAIL
+from citabot.infrastructure.seed import LEGACY_DEMO_EMAIL
 
 from . import support
 from .test_api import ApiTestCase
@@ -97,21 +109,112 @@ class AuthServiceTest(unittest.TestCase):
             messages.add(str(caught.exception))
         self.assertEqual(len(messages), 1)
 
-    def test_repeated_failures_lock_the_email_for_a_while(self) -> None:
-        self.register()
-        for _ in range(MAX_FAILED_LOGINS):
+    def fail(self, email: str, client: str, times: int) -> None:
+        for _ in range(times):
             with self.assertRaises(AuthenticationError):
-                self.c.auth.login("marta@example.com", "otra-clave")
+                self.c.auth.login(email, "otra-clave", client=client)
+
+    def test_repeated_failures_lock_the_email_for_that_client_for_a_while(self) -> None:
+        self.register()
+        self.fail("marta@example.com", "10.0.0.9", MAX_FAILED_LOGINS)
         with self.assertRaises(RateLimitedError):
-            self.c.auth.login("marta@example.com", "una-clave-larga")  # even the right one
+            self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9")  # even the right one
 
         self.clock.moment = support.NOW + timedelta(minutes=16)
-        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga").token)
+        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9").token)
 
-    def test_the_demo_account_has_no_password(self) -> None:
+    def test_a_stranger_cannot_lock_the_owner_out(self) -> None:
+        self.register()
+        self.fail("marta@example.com", "10.0.0.9", MAX_FAILED_LOGINS)
+        session = self.c.auth.login("marta@example.com", "una-clave-larga", client="192.168.1.20")
+        self.assertTrue(session.token)
+
+    def test_a_client_spraying_many_emails_is_stopped(self) -> None:
+        self.register()
+        for i in range(MAX_FAILED_LOGINS_PER_CLIENT):
+            self.fail(f"persona{i}@example.com", "10.0.0.9", 1)
+        with self.assertRaises(RateLimitedError):
+            self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9")
+        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.1").token)
+
+    def test_signups_per_client_are_limited(self) -> None:
+        for i in range(MAX_SIGNUPS_PER_CLIENT):
+            self.c.auth.register(**(SIGNUP | {"email": f"dueno{i}@example.com"}), client="10.0.0.9")
+        with self.assertRaises(RateLimitedError):
+            self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.9")
+        self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.1")
+
+
+class DemoServiceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.clock = FixedClock(support.NOW)
+        self.c = support.make_container()
+        self.c.auth._clock = self.c.demo._clock = self.clock
+        self.addCleanup(self.c.close)
+
+    def test_each_visitor_gets_a_private_copy_of_the_sample_business(self) -> None:
+        first, second = self.c.demo.start(), self.c.demo.start()
+        a, b = first.user.business_id, second.user.business_id
+        self.assertNotIn(support.BUSINESS_ID, (a, b))
+        self.assertNotEqual(a, b)
+        self.assertEqual(len(self.c.inbox.list(a)), len(self.c.inbox.list(support.BUSINESS_ID)))
+
+        self.c.agent.handle_inbound(a, phone="+57 300 000 0001", text="Hola", profile_name="Ana")
+        phones_b = {x.contact.phone for x in self.c.inbox.list(b)}
+        self.assertNotIn("+57 300 000 0001", phones_b)
+
+    def test_demo_accounts_have_no_password(self) -> None:
+        email = self.c.demo.start().user.email
         for password in ("", UNUSABLE_PASSWORD, "demo"):
             with self.subTest(password=password), self.assertRaises(AuthenticationError):
-                self.c.auth.login(DEMO_EMAIL, password)
+                self.c.auth.login(email, password)
+
+    def test_demos_expire_and_are_purged(self) -> None:
+        old = self.c.demo.start()
+        self.assertEqual(old.expires_at, support.NOW + DEMO_TTL)  # not the 14-day default
+
+        self.clock.moment = support.NOW + DEMO_TTL + timedelta(minutes=1)
+        self.assertIsNone(self.c.auth.authenticate(old.token))
+        new = self.c.demo.start()  # starting a demo sweeps the expired ones
+        # SQLite may hand freed ids to the new demo, so look the old account up by email.
+        self.assertIsNone(self.c.auth._users.find_by_email(old.user.email))
+        demos = self.c.db.query("SELECT id FROM businesses WHERE demo_expires_at IS NOT NULL")
+        self.assertEqual([row["id"] for row in demos], [new.user.business_id])
+        self.c.business.get(support.BUSINESS_ID)  # the sample business is never purged
+
+    def test_demo_starts_per_client_are_limited(self) -> None:
+        for _ in range(MAX_DEMOS_PER_CLIENT):
+            self.c.demo.start(client="10.0.0.9")
+        with self.assertRaises(RateLimitedError):
+            self.c.demo.start(client="10.0.0.9")
+        self.c.demo.start(client="10.0.0.1")
+
+    def test_only_demo_businesses_can_be_reset(self) -> None:
+        business_id = self.c.demo.start().user.business_id
+        self.c.knowledge.add_doc(business_id, "Wifi", "La clave es sonrisa2026.")
+        self.c.demo.reset(business_id)
+        self.assertNotIn("Wifi", {d.title for d in self.c.knowledge.list_docs(business_id)})
+        with self.assertRaises(ValidationError):
+            self.c.demo.reset(support.BUSINESS_ID)
+
+
+class LegacyDemoAccountTest(unittest.TestCase):
+    def test_the_old_shared_demo_account_is_signed_out_on_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "citabot.db")
+            c = support.make_container(db_path=path)
+            user = c.auth._users.add(
+                support.BUSINESS_ID, LEGACY_DEMO_EMAIL, "Equipo Sonrisa", UNUSABLE_PASSWORD, support.NOW
+            )
+            token = c.auth.start_session(user).token
+            c.close()
+
+            c = support.make_container(db_path=path)
+            try:
+                self.assertIsNone(c.auth.authenticate(token))
+                self.assertIsNone(c.auth._users.find_by_email(LEGACY_DEMO_EMAIL))
+            finally:
+                c.close()
 
 
 class AuthApiTest(ApiTestCase):
@@ -188,6 +291,16 @@ class AuthApiTest(ApiTestCase):
         self.assertEqual(self.call("POST", "/api/auth/login", good)[0], 200)
         self.assertEqual(len(self.call("GET", "/api/knowledge")[1]), 1)
 
+    def test_demo_visitors_do_not_see_each_other(self) -> None:
+        self.call("POST", "/api/auth/demo")
+        message = {"phone": "+57 300 999 0000", "name": "Visitante A", "text": "Hola"}
+        self.assertEqual(self.call("POST", "/api/simulator/messages", message)[0], 200)
+        self.cookie = None  # a second browser
+
+        self.call("POST", "/api/auth/demo")
+        _, inbox = self.call("GET", "/api/conversations")
+        self.assertNotIn("+57 300 999 0000", {x["contact"]["phone"] for x in inbox})
+
     def test_writes_from_another_site_are_refused(self) -> None:
         status, data = self.call("POST", "/api/auth/demo", {}, {"Origin": "https://evil.example"})
         self.assertEqual((status, data["error"]["code"]), (403, "cross_site_request"))
@@ -201,6 +314,37 @@ class DemoDisabledTest(ApiTestCase):
     def test_demo_sign_in_can_be_turned_off(self) -> None:
         self.assertFalse(self.call("GET", "/api/health")[1]["demo_login"])
         self.assertEqual(self.call("POST", "/api/auth/demo")[0], 403)
+
+
+class ClientAddressCase(ApiTestCase):
+    """Login limits follow the client's address; X-Forwarded-For only counts behind a proxy."""
+
+    signed_in = False
+
+    def lock_from(self, forwarded_for: str) -> None:
+        self.call("POST", "/api/auth/signup", SIGNUP)
+        wrong = {"email": SIGNUP["email"], "password": "otra-clave"}
+        for _ in range(MAX_FAILED_LOGINS):
+            self.call("POST", "/api/auth/login", wrong, {"X-Forwarded-For": forwarded_for})
+
+    def login_from(self, forwarded_for: str) -> int:
+        right = {"email": SIGNUP["email"], "password": SIGNUP["password"]}
+        return self.call("POST", "/api/auth/login", right, {"X-Forwarded-For": forwarded_for})[0]
+
+
+class ClientAddressTest(ClientAddressCase):
+    def test_the_header_is_ignored_without_a_proxy(self) -> None:
+        self.lock_from("10.0.0.9")
+        self.assertEqual(self.login_from("10.0.0.1"), 429)  # same socket address: still locked
+
+
+class ClientAddressBehindProxyTest(ClientAddressCase):
+    settings_overrides: ClassVar[dict[str, object]] = {"trust_proxy": True}
+
+    def test_the_header_identifies_the_client(self) -> None:
+        self.lock_from("10.0.0.9")
+        self.assertEqual(self.login_from("10.0.0.9"), 429)
+        self.assertEqual(self.login_from("203.0.113.5, 10.0.0.1"), 200)  # last entry is the client
 
 
 if __name__ == "__main__":

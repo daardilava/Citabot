@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from citabot.domain.errors import (
@@ -22,6 +24,8 @@ from .framework import HttpError, Request, Response, Router
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 1_000_000
+REQUEST_TIMEOUT_SECONDS = 30
+MAX_CONNECTIONS = 64
 _STATUS_BY_ERROR: dict[type[DomainError], tuple[int, str]] = {
     ValidationError: (400, "validation_error"),
     NotFoundError: (404, "not_found"),
@@ -34,8 +38,13 @@ _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+    "Content-Security-Policy": (
+        "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    ),
 }
+# Sent only when the site is served over HTTPS: browsers then refuse plain HTTP for a year.
+_HSTS = "max-age=31536000; includeSubDomains"
 # Windows may map .js to text/plain in its registry; browsers then refuse ES modules.
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -46,11 +55,17 @@ _CONTENT_TYPES = {
 }
 
 
-def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
+def make_handler(
+    router: Router, web_dir: Path, trust_proxy: bool = False, https: bool = False
+) -> type[BaseHTTPRequestHandler]:
     web_root = web_dir.resolve()
+    security_headers = _SECURITY_HEADERS | ({"Strict-Transport-Security": _HSTS} if https else {})
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Citabot"
+        # Socket timeout: a client that stops sending (or never sends the body it
+        # announced) is dropped instead of holding a worker thread forever.
+        timeout = REQUEST_TIMEOUT_SECONDS
 
         def do_GET(self) -> None:
             self._handle()
@@ -70,6 +85,9 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
             except DomainError as exc:
                 status, code = _STATUS_BY_ERROR.get(type(exc), (400, "domain_error"))
                 response = Response.error(status, code, str(exc))
+            except TimeoutError:  # the body never arrived in full
+                self.close_connection = True
+                response = Response.error(408, "request_timeout", "La petición tardó demasiado.")
             except Exception:  # last line of defence; details stay in the log
                 logger.exception("Error no controlado en %s %s", self.command, url.path)
                 response = Response.error(500, "internal_error", "Error interno del servidor.")
@@ -101,8 +119,19 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
                 headers={k.lower(): v for k, v in self.headers.items()},
                 body=self.rfile.read(length) if length > 0 else b"",
                 params=params,
+                client=self._client(),
             )
             return handler(request)
+
+        def _client(self) -> str:
+            """The caller's IP. Behind a reverse proxy the socket only shows the proxy,
+            so with `trust_proxy` the last X-Forwarded-For entry (the one our proxy
+            appended) is used instead. Never trust that header without a proxy:
+            any client can send it."""
+            forwarded = self.headers.get("X-Forwarded-For") if trust_proxy else None
+            if forwarded:
+                return forwarded.rsplit(",", 1)[-1].strip()
+            return str(self.client_address[0])
 
         def _static(self, path: str) -> Response:
             if self.command != "GET":
@@ -130,7 +159,7 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(response.body)))
             # no-cache = revalidate; keeps the panel fresh while you edit the files.
             self.send_header("Cache-Control", "no-cache" if cacheable else "no-store")
-            for name, value in (_SECURITY_HEADERS | response.headers).items():
+            for name, value in (security_headers | response.headers).items():
                 self.send_header(name, value)
             self.end_headers()
             self.wfile.write(response.body)
@@ -138,7 +167,48 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def create_server(host: str, port: int, router: Router, web_dir: Path) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), make_handler(router, web_dir))
-    server.daemon_threads = True
-    return server
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """One thread per connection, but never more than `max_connections` at once.
+
+    When every slot is busy the accept loop waits, and new connections queue in
+    the kernel's backlog instead of spawning threads without limit.
+    """
+
+    daemon_threads = True
+
+    def __init__(
+        self,
+        address: tuple[str, int],
+        handler: type[BaseHTTPRequestHandler],
+        max_connections: int = MAX_CONNECTIONS,
+    ) -> None:
+        super().__init__(address, handler)
+        self._slots = threading.BoundedSemaphore(max_connections)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        self._slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
+def create_server(
+    host: str,
+    port: int,
+    router: Router,
+    web_dir: Path,
+    max_connections: int = MAX_CONNECTIONS,
+    trust_proxy: bool = False,
+    https: bool = False,
+) -> ThreadingHTTPServer:
+    """`https` says the site is served over TLS (usually by the proxy in front)."""
+    handler = make_handler(router, web_dir, trust_proxy, https)
+    return BoundedThreadingHTTPServer((host, port), handler, max_connections)

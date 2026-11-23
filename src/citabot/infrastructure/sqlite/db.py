@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS businesses (
     vertical        TEXT NOT NULL,
     welcome_message TEXT NOT NULL,
     slot_minutes    INTEGER NOT NULL CHECK (slot_minutes > 0),
-    opening_hours   TEXT NOT NULL
+    opening_hours   TEXT NOT NULL,
+    demo_expires_at TEXT
 );
 CREATE TABLE IF NOT EXISTS services (
     id               INTEGER PRIMARY KEY,
@@ -126,6 +127,9 @@ class Database:
         columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(messages)")}
         if "external_id" not in columns:
             self._conn.execute("ALTER TABLE messages ADD COLUMN external_id TEXT")
+        columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(businesses)")}
+        if "demo_expires_at" not in columns:
+            self._conn.execute("ALTER TABLE businesses ADD COLUMN demo_expires_at TEXT")
         # The provider's message id, unique so a redelivered webhook is stored once.
         self._conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_external "
@@ -179,6 +183,17 @@ class Database:
                 self._conn.execute(
                     f"DELETE FROM {table} WHERE business_id = ?", (business_id,)
                 )  # fixed names
+
+    def delete_business(self, business_id: int) -> None:
+        """Delete a business with everything it owns, its users and their sessions."""
+        with self:
+            self.clear_business(business_id)
+            self._conn.execute(
+                "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE business_id = ?)",
+                (business_id,),
+            )
+            self._conn.execute("DELETE FROM users WHERE business_id = ?", (business_id,))
+            self._conn.execute("DELETE FROM businesses WHERE id = ?", (business_id,))
 
     def close(self) -> None:
         with self._lock:

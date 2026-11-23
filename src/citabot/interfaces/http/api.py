@@ -12,7 +12,6 @@ from citabot.container import Container
 from citabot.domain.errors import AuthenticationError, ValidationError
 from citabot.domain.models import Appointment, AppointmentStatus, ConversationMode, User
 from citabot.infrastructure.messaging.whatsapp_cloud import parse_webhook, signature_is_valid
-from citabot.infrastructure.seed import DEMO_EMAIL
 
 from . import schemas as s
 from .framework import HttpError, Request, Response, Router
@@ -50,7 +49,7 @@ def build_router(c: Container) -> Router:
         return {
             "user": {"name": user.name, "email": user.email},
             "business": {"id": business.id, "name": business.name},
-            "is_demo": business.id == c.settings.default_business_id,
+            "is_demo": business.is_demo,
         }
 
     def appointment_json(business_id: int, appointment: Appointment) -> dict[str, object]:
@@ -64,13 +63,8 @@ def build_router(c: Container) -> Router:
 
     @router.route("GET", "/api/health")
     def health(_request: Request) -> Response:
-        return Response.json(
-            {
-                "status": "ok",
-                "messaging_provider": c.settings.messaging_provider,
-                "demo_login": c.settings.demo_login,
-            }
-        )
+        # Public: only what the login page needs. Configuration stays private.
+        return Response.json({"status": "ok", "demo_login": c.settings.demo_login})
 
     # ------------------------------------------------------------ accounts
 
@@ -82,19 +76,21 @@ def build_router(c: Container) -> Router:
             name=s.text_field(body, "name"),
             email=s.text_field(body, "email"),
             password=s.text_field(body, "password"),
+            client=request.client,
         )
         return signed_in(session, 201)
 
     @router.route("POST", "/api/auth/login")
     def login(request: Request) -> Response:
         body = request.json()
-        return signed_in(c.auth.login(s.text_field(body, "email"), s.text_field(body, "password")))
+        email, password = s.text_field(body, "email"), s.text_field(body, "password")
+        return signed_in(c.auth.login(email, password, client=request.client))
 
     @router.route("POST", "/api/auth/demo")
-    def login_demo(_request: Request) -> Response:
+    def login_demo(request: Request) -> Response:
         if not c.settings.demo_login:
             raise HttpError(403, "demo_disabled", "La demostración no está disponible.")
-        return signed_in(c.auth.login_without_password(DEMO_EMAIL))
+        return signed_in(c.demo.start(client=request.client))
 
     @router.route("POST", "/api/auth/logout")
     def logout(request: Request) -> Response:
@@ -128,9 +124,10 @@ def build_router(c: Container) -> Router:
 
     @router.route("POST", "/api/demo/reset")
     def reset_demo(request: Request) -> Response:
-        if tenant(request) != c.settings.default_business_id:
-            raise HttpError(403, "not_demo", "Solo el negocio de demostración se puede reiniciar.")
-        c.reset_demo()
+        business_id = tenant(request)
+        if not c.business.get(business_id).is_demo:
+            raise HttpError(403, "not_demo", "Solo un negocio de demostración se puede reiniciar.")
+        c.demo.reset(business_id)
         return Response.json({"reset": True})
 
     # ------------------------------------------------------------ business & services
@@ -332,13 +329,14 @@ def build_router(c: Container) -> Router:
 
     @router.route("POST", "/webhooks/whatsapp")
     def receive_webhook(request: Request) -> Response:
+        # Only Meta may post here. Without the app secret there is no way to tell
+        # Meta from anyone else, so the endpoint stays closed (the simulator does
+        # not need it: it has its own route behind the session).
         secret = c.settings.whatsapp_app_secret
-        if secret:
-            if not signature_is_valid(secret, request.body, request.headers.get("x-hub-signature-256")):
-                raise HttpError(401, "invalid_signature", "Firma inválida.")
-        elif c.settings.messaging_provider == "whatsapp_cloud":
-            # Never accept unsigned webhooks once real messages are flowing.
+        if not secret:
             raise HttpError(503, "not_configured", "Falta WHATSAPP_APP_SECRET.")
+        if not signature_is_valid(secret, request.body, request.headers.get("x-hub-signature-256")):
+            raise HttpError(401, "invalid_signature", "Firma inválida.")
         # Store each message now and answer it in the background: Meta redelivers
         # a webhook that is not acknowledged within a few seconds, and a reply
         # that waits for a language model can take longer than that.
