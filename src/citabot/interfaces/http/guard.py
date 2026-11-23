@@ -21,6 +21,10 @@ Send = Callable[[Message], Awaitable[None]]
 ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
 
 MAX_BODY_BYTES = 1_000_000
+# An oversized body is still read (and thrown away) up to this size, so the 413
+# reaches the client instead of being lost to a connection reset. Past it, the
+# server just hangs up.
+_DRAIN_LIMIT_BYTES = 10_000_000
 # A client that stops sending its body for this long gets a 408.
 REQUEST_TIMEOUT_SECONDS = 30.0
 
@@ -93,11 +97,11 @@ class RequestGuard:
 
     async def _read_body(self, scope: Scope, receive: Receive) -> bytes:
         declared = _header(scope, b"content-length")
-        if declared is not None:
-            if not declared.isdigit():
-                raise _RefusedError(400, "bad_request", "Content-Length inválido.")
-            if int(declared) > MAX_BODY_BYTES:
-                raise _RefusedError(413, "payload_too_large", "El cuerpo supera 1 MB.")
+        if declared is not None and not declared.isdigit():
+            raise _RefusedError(400, "bad_request", "Content-Length inválido.")
+        too_large = _RefusedError(413, "payload_too_large", "El cuerpo supera 1 MB.")
+        if declared is not None and int(declared) > _DRAIN_LIMIT_BYTES:
+            raise too_large
         chunks: list[bytes] = []
         size = 0
         while True:
@@ -109,10 +113,13 @@ class RequestGuard:
                 raise _DisconnectedError
             chunk = message.get("body", b"")
             size += len(chunk)
-            if size > MAX_BODY_BYTES:
-                raise _RefusedError(413, "payload_too_large", "El cuerpo supera 1 MB.")
-            chunks.append(chunk)
+            if size > _DRAIN_LIMIT_BYTES:
+                raise too_large
+            if size <= MAX_BODY_BYTES:
+                chunks.append(chunk)  # past the limit, keep reading but drop the bytes
             if not message.get("more_body", False):
+                if size > MAX_BODY_BYTES:
+                    raise too_large
                 return b"".join(chunks)
 
     def _check_origin(self, scope: Scope) -> None:
