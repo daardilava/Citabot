@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import timedelta
+from pathlib import Path
 from typing import ClassVar
 
 from citabot.application.auth import (
@@ -20,6 +22,7 @@ from citabot.domain.errors import (
 )
 from citabot.infrastructure.clock import FixedClock
 from citabot.infrastructure.security import UNUSABLE_PASSWORD, ScryptHasher
+from citabot.infrastructure.seed import LEGACY_DEMO_EMAIL
 
 from . import support
 from .test_api import ApiTestCase
@@ -193,6 +196,25 @@ class DemoServiceTest(unittest.TestCase):
         self.assertNotIn("Wifi", {d.title for d in self.c.knowledge.list_docs(business_id)})
         with self.assertRaises(ValidationError):
             self.c.demo.reset(support.BUSINESS_ID)
+
+
+class LegacyDemoAccountTest(unittest.TestCase):
+    def test_the_old_shared_demo_account_is_signed_out_on_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "citabot.db")
+            c = support.make_container(db_path=path)
+            user = c.auth._users.add(
+                support.BUSINESS_ID, LEGACY_DEMO_EMAIL, "Equipo Sonrisa", UNUSABLE_PASSWORD, support.NOW
+            )
+            token = c.auth.start_session(user).token
+            c.close()
+
+            c = support.make_container(db_path=path)
+            try:
+                self.assertIsNone(c.auth.authenticate(token))
+                self.assertIsNone(c.auth._users.find_by_email(LEGACY_DEMO_EMAIL))
+            finally:
+                c.close()
 
 
 class AuthApiTest(ApiTestCase):

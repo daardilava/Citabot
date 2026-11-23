@@ -32,7 +32,7 @@ from citabot.infrastructure.retrieval.bm25 import Bm25Retriever
 from citabot.infrastructure.retrieval.extractive import ExtractiveAnswerGenerator
 from citabot.infrastructure.retrieval.llm import LlmAnswerGenerator
 from citabot.infrastructure.security import ScryptHasher
-from citabot.infrastructure.seed import SqliteDemoSeeder, seed_demo
+from citabot.infrastructure.seed import SqliteDemoSeeder, remove_legacy_demo_account, seed_demo
 from citabot.infrastructure.sqlite.db import Database
 from citabot.infrastructure.sqlite.repositories import (
     SqliteAppointmentRepository,
@@ -109,6 +109,7 @@ def build_container(
 
     if not businesses.exists_any():
         seed_demo(db, clock.now())
+    remove_legacy_demo_account(db)
 
     messenger = ConversationMessenger(conversations, gateway or _gateway(settings), clock)
     booking = BookingService(db, businesses, appointments, contacts, clock)

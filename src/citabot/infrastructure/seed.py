@@ -126,6 +126,22 @@ def seed_demo(db: Database, now: datetime) -> int:
         return business.id
 
 
+# Before each visitor got a private demo, everyone signed in to the sample
+# business through this one shared account.
+LEGACY_DEMO_EMAIL = "demo@citabot.local"
+
+
+def remove_legacy_demo_account(db: Database) -> None:
+    """Delete the old shared demo account and its sessions, so browsers still
+    holding one are signed out instead of staying in the shared business."""
+    with db:
+        db.execute(
+            "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email = ?)",
+            (LEGACY_DEMO_EMAIL,),
+        )
+        db.execute("DELETE FROM users WHERE email = ?", (LEGACY_DEMO_EMAIL,))
+
+
 class SqliteDemoSeeder:
     """Every visitor of «Ver la demo» gets a private copy of the sample business."""
 
