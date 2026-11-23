@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from citabot.application.ports import ConversationSummary, Passage
 from citabot.domain.errors import ValidationError
@@ -18,31 +20,76 @@ from citabot.domain.models import (
 )
 
 # ---------------------------------------------------------------- input
+#
+# Request bodies are strict: "30" is not a number and 1 is not true, as before.
+# An empty string counts as missing for required text.
+
+Text = Annotated[str, StringConstraints(min_length=1)]
 
 
-def text_field(body: dict[str, Any], name: str, required: bool = True) -> str:
-    value = body.get(name)
-    if value is None or value == "":
-        if required:
-            raise ValidationError(f"El campo «{name}» es obligatorio.")
-        return ""
-    if not isinstance(value, str):
-        raise ValidationError(f"El campo «{name}» debe ser texto.")
-    return value
+class Body(BaseModel):
+    model_config = ConfigDict(strict=True)
 
 
-def int_field(body: dict[str, Any], name: str) -> int:
-    value = body.get(name)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValidationError(f"El campo «{name}» debe ser un número entero.")
-    return value
+class SignupIn(Body):
+    business_name: Text
+    name: Text
+    email: Text
+    password: Text
 
 
-def bool_field(body: dict[str, Any], name: str) -> bool | None:
-    value = body.get(name)
-    if value is not None and not isinstance(value, bool):
-        raise ValidationError(f"El campo «{name}» debe ser verdadero o falso.")
-    return value
+class LoginIn(Body):
+    email: Text
+    password: Text
+
+
+class BusinessIn(Body):
+    name: Text
+    welcome_message: Text
+    slot_minutes: int
+    # {"0": [["08:00", "12:00"]], ...}: weekday (0 = Monday) to opening ranges.
+    opening_hours: dict[str, list[list[str]]]
+
+
+class ServiceIn(Body):
+    name: Text
+    duration_minutes: int
+    price: str | None = None
+
+
+class ConversationPatch(Body):
+    mode: str | None = None
+    needs_attention: bool | None = None
+
+
+class ReplyIn(Body):
+    text: Text
+
+
+class AppointmentIn(Body):
+    phone: Text
+    name: Text
+    service_id: int
+    starts_at: Text  # ISO 8601; parsed with parse_datetime
+
+
+class AppointmentPatch(Body):
+    status: Text
+
+
+class DocIn(Body):
+    title: Text
+    content: Text
+
+
+class SearchIn(Body):
+    query: Text
+
+
+class SimulatorIn(Body):
+    phone: Text
+    text: Text
+    name: str | None = None
 
 
 def parse_date(value: str | None, name: str) -> date:
@@ -59,21 +106,14 @@ def parse_datetime(value: str, name: str) -> datetime:
         raise ValidationError(f"«{name}» debe ser una fecha y hora ISO 8601.") from exc
 
 
-def parse_hours(raw: Any) -> dict[int, list[tuple[str, str]]]:
+def parse_hours(raw: dict[str, list[list[str]]]) -> dict[int, list[tuple[str, str]]]:
     """{"0": [["08:00", "12:00"]], …} -> {0: [("08:00", "12:00")], …}"""
     error = ValidationError("«opening_hours» debe ser {día: [[inicio, fin], …]}.")
-    if not isinstance(raw, dict):
-        raise error
     hours: dict[int, list[tuple[str, str]]] = {}
     for key, ranges in raw.items():
-        if not str(key).isdigit() or not isinstance(ranges, list):
+        if not key.isdigit() or any(len(item) != 2 for item in ranges):
             raise error
-        parsed = []
-        for item in ranges:
-            if not (isinstance(item, list) and len(item) == 2 and all(isinstance(x, str) for x in item)):
-                raise error
-            parsed.append((item[0], item[1]))
-        hours[int(key)] = parsed
+        hours[int(key)] = [(item[0], item[1]) for item in ranges]
     return hours
 
 
