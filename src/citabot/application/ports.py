@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from enum import Enum
+from enum import StrEnum
 from types import TracebackType
 from typing import Any, Protocol
 
@@ -33,7 +33,7 @@ from citabot.domain.models import (
 # ---------------------------------------------------------------- language
 
 
-class Intent(str, Enum):
+class Intent(StrEnum):
     GREETING = "greeting"
     BOOK = "book"
     CANCEL = "cancel"

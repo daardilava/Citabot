@@ -30,6 +30,8 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
   peticiones simultáneas el servidor responde 503. Los errores conservan la forma
   `{"error": {"code", "message"}}`. Ahora hay que instalar dependencias: `pip install -e .`
   (`start.bat` lo hace solo la primera vez).
+- **Requiere Python 3.11 o superior.** Python 3.10 dejó de recibir soporte en octubre de 2026 y las
+  versiones actuales de FastAPI ya no lo admiten.
 - Las llamadas al modelo de lenguaje ya no ocurren dentro de la transacción de la base de datos:
   un cliente no espera por la respuesta de otro y el panel no se congela.
 - Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id` y

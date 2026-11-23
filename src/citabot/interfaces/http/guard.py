@@ -107,7 +107,7 @@ class RequestGuard:
         while True:
             try:
                 message = await asyncio.wait_for(receive(), REQUEST_TIMEOUT_SECONDS)
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise _RefusedError(408, "request_timeout", "La petición tardó demasiado.") from exc
             if message["type"] == "http.disconnect":
                 raise _DisconnectedError

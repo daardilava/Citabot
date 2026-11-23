@@ -1,7 +1,7 @@
 # Citabot
 
 [![CI](https://github.com/daardilava/Citabot/actions/workflows/ci.yml/badge.svg)](https://github.com/daardilava/Citabot/actions/workflows/ci.yml)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
 
 Agente de citas y preguntas frecuentes por WhatsApp para pymes. MVP navegable que corre en tu equipo, con una clínica dental como negocio de demostración.
@@ -10,7 +10,7 @@ El cliente escribe por WhatsApp, el agente agenda, responde con la base de conoc
 
 ## Ejecutar
 
-Requiere **Python 3.10 o superior**.
+Requiere **Python 3.11 o superior**.
 
 ```bash
 python -m venv .venv
@@ -118,7 +118,7 @@ python -m unittest discover -s tests -t .
 
 Las pruebas cubren reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. La CI exige al menos 85 % de cobertura de ramas.
 
-La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff`, `mypy --strict`, CodeQL y Gitleaks. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
+La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.11 y 3.13, además de `ruff`, `mypy --strict`, CodeQL y Gitleaks. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
 ## Entender los mensajes con un LLM
 

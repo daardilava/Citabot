@@ -4,35 +4,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, time
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ConversationMode(str, Enum):
+class ConversationMode(StrEnum):
     """Who answers the customer: the automated agent or a human teammate."""
 
     BOT = "bot"
     HUMAN = "human"
 
 
-class Direction(str, Enum):
+class Direction(StrEnum):
     INBOUND = "in"
     OUTBOUND = "out"
 
 
-class Sender(str, Enum):
+class Sender(StrEnum):
     CUSTOMER = "customer"
     BOT = "bot"
     AGENT = "agent"
 
 
-class AppointmentStatus(str, Enum):
+class AppointmentStatus(StrEnum):
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
 
 
-class AppointmentSource(str, Enum):
+class AppointmentSource(StrEnum):
     WHATSAPP = "whatsapp"
     DASHBOARD = "dashboard"
 
