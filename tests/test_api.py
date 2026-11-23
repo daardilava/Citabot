@@ -5,14 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import threading
 import unittest
 import urllib.error
 import urllib.request
 from typing import Any, ClassVar
 
-from citabot.interfaces.http.api import build_router
-from citabot.interfaces.http.server import create_server
+from citabot.interfaces.http.app import create_app
 from tests import support
 
 
@@ -21,19 +19,9 @@ class ApiTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.c = support.make_container(**self.settings_overrides)
-        self.server = create_server(
-            "127.0.0.1",
-            0,
-            build_router(self.c),
-            self.c.settings.web_dir,
-            trust_proxy=self.c.settings.trust_proxy,
-            https=self.c.settings.cookie_secure,
-        )
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.base, stop = support.serve(create_app(self.c))
         self.addCleanup(self.c.close)
-        self.addCleanup(self.server.server_close)
-        self.addCleanup(self.server.shutdown)
+        self.addCleanup(stop)
         self.cookie: str | None = None
         if self.signed_in:
             self.call("POST", "/api/auth/demo")
@@ -47,6 +35,8 @@ class ApiTestCase(unittest.TestCase):
         """Send a request, keeping the session cookie between calls like a browser."""
         data = body if isinstance(body, bytes) else (json.dumps(body).encode() if body is not None else None)
         headers = dict(headers or {})
+        if data is not None:  # like the panel's fetch() calls
+            headers.setdefault("Content-Type", "application/json")
         if self.cookie:
             headers["Cookie"] = self.cookie
         request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)

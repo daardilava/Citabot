@@ -2,7 +2,7 @@
 
 ## Preparar el entorno
 
-La aplicación no tiene dependencias; las herramientas de desarrollo sí.
+La aplicación depende solo de FastAPI y uvicorn; las herramientas de desarrollo van aparte.
 
 ```bash
 python -m venv .venv
@@ -39,7 +39,7 @@ coverage run -m unittest discover -s tests -t .
 coverage report                 # falla por debajo del 85 % de cobertura de ramas
 ```
 
-Son los mismos pasos que ejecuta la CI en Linux y Windows, con Python 3.10 y 3.13. La CI también
+Son los mismos pasos que ejecuta la CI en Linux y Windows, con Python 3.11 y 3.13. La CI también
 corre CodeQL y Gitleaks; si el *hook* de `pre-commit` está instalado, Gitleaks revisa cada commit
 antes de crearlo.
 
@@ -50,8 +50,8 @@ antes de crearlo.
   `application/ports.py`. Solo `container.py` elige adaptadores.
 - **La agenda es determinista**: un modelo de lenguaje puede entender un mensaje o redactar una
   respuesta, pero nunca decide si un horario está libre.
-- **La aplicación arranca sin instalar nada**: cualquier dependencia nueva es opcional y se importa
-  solo cuando su adaptador está activado.
+- **Pocas dependencias, y en el borde**: FastAPI vive solo en `interfaces/http/`. Una dependencia de
+  un adaptador opcional (como `anthropic`) se importa solo cuando ese adaptador está activado.
 - **Cada cambio de comportamiento lleva su prueba.** Las pruebas no llaman a servicios externos;
   los adaptadores de red se prueban con clientes falsos.
 - Código y comentarios en inglés; textos para el cliente y documentación en español.

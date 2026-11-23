@@ -1,8 +1,8 @@
 # Citabot
 
 [![CI](https://github.com/daardilava/Citabot/actions/workflows/ci.yml/badge.svg)](https://github.com/daardilava/Citabot/actions/workflows/ci.yml)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
-![Sin dependencias](https://img.shields.io/badge/dependencias-ninguna-brightgreen)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
 
 Agente de citas y preguntas frecuentes por WhatsApp para pymes. MVP navegable que corre en tu equipo, con una clínica dental como negocio de demostración.
 
@@ -10,13 +10,16 @@ El cliente escribe por WhatsApp, el agente agenda, responde con la base de conoc
 
 ## Ejecutar
 
-Requiere **Python 3.10 o superior**. No hay nada que instalar: el proyecto usa solo la biblioteca estándar.
+Requiere **Python 3.11 o superior**.
 
 ```bash
+python -m venv .venv
+.venv\Scripts\activate          # Windows (en macOS/Linux: source .venv/bin/activate)
+pip install -e .
 python run.py
 ```
 
-En Windows también puedes hacer doble clic en `start.bat`. Luego abre <http://localhost:8000>.
+En Windows también puedes hacer doble clic en `start.bat`: la primera vez prepara el entorno solo. Luego abre <http://localhost:8000>. La documentación interactiva de la API está en <http://localhost:8000/api/docs>.
 
 La primera vez se crea `data/citabot.db` con datos de ejemplo. Cada **Ver la demo** crea una copia privada de la clínica de ejemplo que se borra a las 24 horas; para volver a su estado inicial, usa **Reiniciar datos de demo** en la pantalla Resumen.
 
@@ -72,7 +75,7 @@ src/citabot/
   application/       agent.py · booking.py · knowledge.py · inbox.py · reminders.py
                      business.py · messenger.py · ports.py · text.py
   infrastructure/    sqlite/ · nlu/ · retrieval/ · messaging/ · clock.py · seed.py
-  interfaces/http/   framework.py · server.py · api.py · schemas.py
+  interfaces/http/   app.py · api.py · guard.py · schemas.py · errors.py
   config.py · container.py · __main__.py
 web/                 index.html · css/ · js/ (módulos ES, sin build)
 tests/               unittest: dominio, intérprete, agente y API de punta a punta
@@ -89,7 +92,7 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 | **Recibir y responder son dos pasos** | `receive` guarda el mensaje en una transacción corta y el webhook confirma a Meta de inmediato; `respond` corre en segundo plano. Un mensaje reenviado se reconoce por su id y no se responde dos veces. |
 | **El modelo nunca corre dentro de una transacción** | Entender el mensaje y redactar la respuesta ocurren sin el bloqueo de la base de datos, así que un cliente no espera por la llamada al modelo de otro. El diálogo, que es determinista, sí corre en una transacción; si necesita una respuesta de conocimiento, se deshace, se consulta y se repite. |
 | **Multi-tenant desde el modelo** | Todo registro cuelga de `business_id` y todo caso de uso lo recibe. `tenant()` en `api.py` lo toma de la sesión, así que ninguna ruta del panel responde sin sesión ni alcanza datos de otro negocio. |
-| **Sin dependencias externas** | Arranca con `python run.py` en cualquier equipo. El costo: un mini-router propio en `framework.py` en vez de FastAPI. Las rutas no contienen lógica, así que migrar es mecánico. |
+| **FastAPI en la capa HTTP, nada más** | Las rutas validan con Pydantic, llaman un caso de uso y serializan; FastAPI publica el esquema OpenAPI. Dominio y aplicación no importan FastAPI: cambiar de framework toca solo `interfaces/http/`. |
 | **Frontend sin build** | Módulos ES nativos y un helper `h()` que solo escribe con `textContent`, de modo que un mensaje de cliente no puede inyectar HTML. |
 | **Colores como tokens** | Todo color es una variable CSS con valor claro y oscuro. `theme.js` se carga en el `<head>` para aplicar el tema antes de pintar, y una prueba exige que cada token claro tenga su versión oscura. |
 
@@ -101,7 +104,7 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 - Las escrituras a `/api/` desde otro origen se rechazan (protección CSRF).
 - Inicio de sesión limitado por correo **y** dirección IP, de modo que un tercero no puede bloquear tu cuenta; también se limitan los registros y las demos por IP. Detrás de un proxy inverso, activa `CITABOT_TRUST_PROXY=1` para que los límites usen la IP real.
 - **Ver la demo** crea para cada visitante una copia privada de la clínica de ejemplo, que se borra a las 24 horas: nadie ve lo que escribió otro. Apágalo con `CITABOT_DEMO_LOGIN=0` si no la quieres, y activa `CITABOT_COOKIE_SECURE=1` detrás de HTTPS.
-- Las conexiones que dejan de enviar datos se cierran a los 30 s y se atienden máximo 64 a la vez.
+- Una petición cuyo cuerpo deja de llegar recibe 408 a los 30 s, y por encima de 64 peticiones simultáneas el servidor responde 503 en vez de acumularlas.
 - El webhook de WhatsApp queda cerrado (503) mientras no haya `WHATSAPP_APP_SECRET`.
 - Verificación de firma `X-Hub-Signature-256` en el webhook y comparación en tiempo constante del token.
 - Consultas SQL parametrizadas, límite de 1 MB por petición, protección contra *path traversal* en archivos estáticos.
@@ -115,7 +118,7 @@ python -m unittest discover -s tests -t .
 
 Las pruebas cubren reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. La CI exige al menos 85 % de cobertura de ramas.
 
-La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff`, `mypy --strict`, CodeQL y Gitleaks. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
+La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.11 y 3.13, además de `ruff`, `mypy --strict`, CodeQL y Gitleaks. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
 ## Entender los mensajes con un LLM
 
