@@ -1,17 +1,17 @@
 ---
-name: Mejora
-about: Una función nueva o un cambio de comportamiento
+name: Feature request
+about: A new feature or a change in behavior
 labels: enhancement
 ---
 
-## Problema
+## Problem
 
-<!-- Qué necesita el negocio o el cliente que hoy no se puede hacer. -->
+<!-- What the business or the customer needs that can't be done today. -->
 
-## Propuesta
+## Proposal
 
-## Alternativas consideradas
+## Alternatives considered
 
-## Criterios de aceptación
+## Acceptance criteria
 
 - [ ]
