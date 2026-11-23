@@ -30,9 +30,21 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 - Las bases de datos existentes se migran solas al abrirlas (columna `messages.external_id` y
   tablas `users` y `sessions`).
 - «Reiniciar datos de demo» solo afecta al negocio de demostración y conserva todas las cuentas.
+- «Ver la demo» crea para cada visitante una copia privada de la clínica de ejemplo, que se borra
+  a las 24 horas. Antes todos los visitantes compartían el mismo negocio y veían los mensajes de
+  los demás. La clínica de ejemplo original sigue recibiendo el webhook.
+- Nueva variable `CITABOT_TRUST_PROXY` para leer la IP del cliente de `X-Forwarded-For` detrás de
+  un proxy inverso.
 
 ### Corregido
 
+- **Seguridad**: el bloqueo por intentos fallidos se lleva por correo y dirección IP; antes
+  cualquiera podía bloquear una cuenta ajena con cinco contraseñas erróneas. También se limitan
+  los registros y las demos por IP.
+- **Seguridad**: las conexiones que no terminan de enviar su petición se cierran a los 30 s (408)
+  y se atienden máximo 64 conexiones a la vez.
+- **Seguridad**: el webhook de WhatsApp rechaza todo (503) mientras falte `WHATSAPP_APP_SECRET`,
+  también en modo simulador.
 - La conexión con la API de Anthropic usa solo IPv4, lo que evita esperas de unos 20 s en redes
   con IPv6 mal enrutado.
 

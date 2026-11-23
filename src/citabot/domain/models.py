@@ -63,6 +63,12 @@ class Business:
     welcome_message: str
     slot_minutes: int
     opening_hours: OpeningHours
+    # Set on the throwaway businesses behind «Ver la demo»; they are deleted after it.
+    demo_expires_at: datetime | None = None
+
+    @property
+    def is_demo(self) -> bool:
+        return self.demo_expires_at is not None
 
     def ranges_for(self, weekday: int) -> list[TimeRange]:
         return self.opening_hours.get(weekday, [])

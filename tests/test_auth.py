@@ -12,10 +12,14 @@ from citabot.application.auth import (
     MAX_SIGNUPS_PER_CLIENT,
     SESSION_TTL,
 )
-from citabot.domain.errors import AuthenticationError, RateLimitedError, ValidationError
+from citabot.application.demo import DEMO_TTL, MAX_DEMOS_PER_CLIENT
+from citabot.domain.errors import (
+    AuthenticationError,
+    RateLimitedError,
+    ValidationError,
+)
 from citabot.infrastructure.clock import FixedClock
 from citabot.infrastructure.security import UNUSABLE_PASSWORD, ScryptHasher
-from citabot.infrastructure.seed import DEMO_EMAIL
 
 from . import support
 from .test_api import ApiTestCase
@@ -137,10 +141,58 @@ class AuthServiceTest(unittest.TestCase):
             self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.9")
         self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.1")
 
-    def test_the_demo_account_has_no_password(self) -> None:
+
+class DemoServiceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.clock = FixedClock(support.NOW)
+        self.c = support.make_container()
+        self.c.auth._clock = self.c.demo._clock = self.clock
+        self.addCleanup(self.c.close)
+
+    def test_each_visitor_gets_a_private_copy_of_the_sample_business(self) -> None:
+        first, second = self.c.demo.start(), self.c.demo.start()
+        a, b = first.user.business_id, second.user.business_id
+        self.assertNotIn(support.BUSINESS_ID, (a, b))
+        self.assertNotEqual(a, b)
+        self.assertEqual(len(self.c.inbox.list(a)), len(self.c.inbox.list(support.BUSINESS_ID)))
+
+        self.c.agent.handle_inbound(a, phone="+57 300 000 0001", text="Hola", profile_name="Ana")
+        phones_b = {x.contact.phone for x in self.c.inbox.list(b)}
+        self.assertNotIn("+57 300 000 0001", phones_b)
+
+    def test_demo_accounts_have_no_password(self) -> None:
+        email = self.c.demo.start().user.email
         for password in ("", UNUSABLE_PASSWORD, "demo"):
             with self.subTest(password=password), self.assertRaises(AuthenticationError):
-                self.c.auth.login(DEMO_EMAIL, password)
+                self.c.auth.login(email, password)
+
+    def test_demos_expire_and_are_purged(self) -> None:
+        old = self.c.demo.start()
+        self.assertEqual(old.expires_at, support.NOW + DEMO_TTL)  # not the 14-day default
+
+        self.clock.moment = support.NOW + DEMO_TTL + timedelta(minutes=1)
+        self.assertIsNone(self.c.auth.authenticate(old.token))
+        new = self.c.demo.start()  # starting a demo sweeps the expired ones
+        # SQLite may hand freed ids to the new demo, so look the old account up by email.
+        self.assertIsNone(self.c.auth._users.find_by_email(old.user.email))
+        demos = self.c.db.query("SELECT id FROM businesses WHERE demo_expires_at IS NOT NULL")
+        self.assertEqual([row["id"] for row in demos], [new.user.business_id])
+        self.c.business.get(support.BUSINESS_ID)  # the sample business is never purged
+
+    def test_demo_starts_per_client_are_limited(self) -> None:
+        for _ in range(MAX_DEMOS_PER_CLIENT):
+            self.c.demo.start(client="10.0.0.9")
+        with self.assertRaises(RateLimitedError):
+            self.c.demo.start(client="10.0.0.9")
+        self.c.demo.start(client="10.0.0.1")
+
+    def test_only_demo_businesses_can_be_reset(self) -> None:
+        business_id = self.c.demo.start().user.business_id
+        self.c.knowledge.add_doc(business_id, "Wifi", "La clave es sonrisa2026.")
+        self.c.demo.reset(business_id)
+        self.assertNotIn("Wifi", {d.title for d in self.c.knowledge.list_docs(business_id)})
+        with self.assertRaises(ValidationError):
+            self.c.demo.reset(support.BUSINESS_ID)
 
 
 class AuthApiTest(ApiTestCase):
@@ -216,6 +268,16 @@ class AuthApiTest(ApiTestCase):
         good = {"email": "marta@example.com", "password": "una-clave-larga"}
         self.assertEqual(self.call("POST", "/api/auth/login", good)[0], 200)
         self.assertEqual(len(self.call("GET", "/api/knowledge")[1]), 1)
+
+    def test_demo_visitors_do_not_see_each_other(self) -> None:
+        self.call("POST", "/api/auth/demo")
+        message = {"phone": "+57 300 999 0000", "name": "Visitante A", "text": "Hola"}
+        self.assertEqual(self.call("POST", "/api/simulator/messages", message)[0], 200)
+        self.cookie = None  # a second browser
+
+        self.call("POST", "/api/auth/demo")
+        _, inbox = self.call("GET", "/api/conversations")
+        self.assertNotIn("+57 300 999 0000", {x["contact"]["phone"] for x in inbox})
 
     def test_writes_from_another_site_are_refused(self) -> None:
         status, data = self.call("POST", "/api/auth/demo", {}, {"Origin": "https://evil.example"})

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 
 from citabot.application.agent import AgentService
 from citabot.application.auth import AuthService
 from citabot.application.booking import BookingService
 from citabot.application.business import BusinessService
+from citabot.application.demo import DemoService
 from citabot.application.inbox import InboxService
 from citabot.application.knowledge import KnowledgeService
 from citabot.application.messenger import ConversationMessenger
@@ -21,7 +21,6 @@ from citabot.application.ports import (
 )
 from citabot.application.reminders import ReminderService
 from citabot.config import Settings
-from citabot.domain.errors import NotFoundError
 from citabot.infrastructure.anthropic_client import create_client
 from citabot.infrastructure.background import BackgroundRunner
 from citabot.infrastructure.clock import SystemClock
@@ -33,7 +32,7 @@ from citabot.infrastructure.retrieval.bm25 import Bm25Retriever
 from citabot.infrastructure.retrieval.extractive import ExtractiveAnswerGenerator
 from citabot.infrastructure.retrieval.llm import LlmAnswerGenerator
 from citabot.infrastructure.security import ScryptHasher
-from citabot.infrastructure.seed import ensure_demo_user, reset_demo, seed_demo
+from citabot.infrastructure.seed import SqliteDemoSeeder, seed_demo
 from citabot.infrastructure.sqlite.db import Database
 from citabot.infrastructure.sqlite.repositories import (
     SqliteAppointmentRepository,
@@ -62,15 +61,12 @@ class Container:
     contacts: SqliteContactRepository
     background: BackgroundRunner
     auth: AuthService
+    demo: DemoService
 
     def close(self) -> None:
         """Finish the replies in progress, then release the database."""
         self.background.shutdown()
         self.db.close()
-
-    def reset_demo(self) -> None:
-        """Load the demo data again. Other businesses and all accounts are untouched."""
-        reset_demo(self.db, self.settings.default_business_id, self.clock.now())
 
 
 def _gateway(settings: Settings) -> MessagingGateway:
@@ -113,11 +109,6 @@ def build_container(
 
     if not businesses.exists_any():
         seed_demo(db, clock.now())
-    else:
-        # A database from before accounts existed has the demo business but no demo user.
-        with contextlib.suppress(NotFoundError):
-            businesses.get(settings.default_business_id)
-            ensure_demo_user(db, settings.default_business_id, clock.now())
 
     messenger = ConversationMessenger(conversations, gateway or _gateway(settings), clock)
     booking = BookingService(db, businesses, appointments, contacts, clock)
@@ -134,6 +125,10 @@ def build_container(
             fallback=quoter,
             whole_base_max_chars=settings.whole_base_max_chars,
         )
+
+    auth = AuthService(
+        db, SqliteUserRepository(db), SqliteSessionRepository(db), businesses, ScryptHasher(), clock
+    )
 
     return Container(
         settings=settings,
@@ -158,7 +153,6 @@ def build_container(
         dashboard=SqliteDashboardReadModel(db),
         contacts=contacts,
         background=BackgroundRunner(),
-        auth=AuthService(
-            db, SqliteUserRepository(db), SqliteSessionRepository(db), businesses, ScryptHasher(), clock
-        ),
+        auth=auth,
+        demo=DemoService(SqliteDemoSeeder(db), businesses, auth, clock),
     )

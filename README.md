@@ -18,7 +18,7 @@ python run.py
 
 En Windows también puedes hacer doble clic en `start.bat`. Luego abre <http://localhost:8000>.
 
-La primera vez se crea `data/citabot.db` con datos de ejemplo. Para volver a ese estado, usa **Reiniciar datos de demo** en la pantalla Resumen.
+La primera vez se crea `data/citabot.db` con datos de ejemplo. Cada **Ver la demo** crea una copia privada de la clínica de ejemplo que se borra a las 24 horas; para volver a su estado inicial, usa **Reiniciar datos de demo** en la pantalla Resumen.
 
 ### Páginas
 
@@ -27,7 +27,7 @@ La primera vez se crea `data/citabot.db` con datos de ejemplo. Para volver a ese
 | `/` | Página de inicio pública: funciones, cómo funciona, planes y preguntas frecuentes. |
 | `/precios` | Planes, comparación detallada y preguntas sobre facturación. |
 | `/registro` | Crea un negocio nuevo, vacío, con su primer usuario. |
-| `/login` | Inicio de sesión. **Ver la demo** entra a la clínica de ejemplo sin contraseña. |
+| `/login` | Inicio de sesión. **Ver la demo** crea una clínica de ejemplo privada y entra sin contraseña. |
 | `/app` | El panel. Sin sesión, redirige a `/login`. |
 
 Los precios y planes son de muestra: la facturación todavía no está implementada.
@@ -99,7 +99,10 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 - Contraseñas con scrypt y sal por usuario. Sesiones en cookie `HttpOnly` y `SameSite=Lax`, guardadas en la base solo como hash; expiran a los 14 días.
 - Inicio de sesión con la misma respuesta para correo inexistente y contraseña errónea, y bloqueo temporal tras 5 intentos fallidos por correo.
 - Las escrituras a `/api/` desde otro origen se rechazan (protección CSRF).
-- **Ver la demo** entra sin contraseña al negocio de ejemplo. Apágalo con `CITABOT_DEMO_LOGIN=0` antes de exponer el servidor, y activa `CITABOT_COOKIE_SECURE=1` detrás de HTTPS.
+- Inicio de sesión limitado por correo **y** dirección IP, de modo que un tercero no puede bloquear tu cuenta; también se limitan los registros y las demos por IP. Detrás de un proxy inverso, activa `CITABOT_TRUST_PROXY=1` para que los límites usen la IP real.
+- **Ver la demo** crea para cada visitante una copia privada de la clínica de ejemplo, que se borra a las 24 horas: nadie ve lo que escribió otro. Apágalo con `CITABOT_DEMO_LOGIN=0` si no la quieres, y activa `CITABOT_COOKIE_SECURE=1` detrás de HTTPS.
+- Las conexiones que dejan de enviar datos se cierran a los 30 s y se atienden máximo 64 a la vez.
+- El webhook de WhatsApp queda cerrado (503) mientras no haya `WHATSAPP_APP_SECRET`.
 - Verificación de firma `X-Hub-Signature-256` en el webhook y comparación en tiempo constante del token.
 - Consultas SQL parametrizadas, límite de 1 MB por petición, protección contra *path traversal* en archivos estáticos.
 - Cabeceras `Content-Security-Policy`, `X-Frame-Options` y `X-Content-Type-Options`.

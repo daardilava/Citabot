@@ -12,7 +12,6 @@ from citabot.container import Container
 from citabot.domain.errors import AuthenticationError, ValidationError
 from citabot.domain.models import Appointment, AppointmentStatus, ConversationMode, User
 from citabot.infrastructure.messaging.whatsapp_cloud import parse_webhook, signature_is_valid
-from citabot.infrastructure.seed import DEMO_EMAIL
 
 from . import schemas as s
 from .framework import HttpError, Request, Response, Router
@@ -50,7 +49,7 @@ def build_router(c: Container) -> Router:
         return {
             "user": {"name": user.name, "email": user.email},
             "business": {"id": business.id, "name": business.name},
-            "is_demo": business.id == c.settings.default_business_id,
+            "is_demo": business.is_demo,
         }
 
     def appointment_json(business_id: int, appointment: Appointment) -> dict[str, object]:
@@ -93,10 +92,10 @@ def build_router(c: Container) -> Router:
         return signed_in(c.auth.login(email, password, client=request.client))
 
     @router.route("POST", "/api/auth/demo")
-    def login_demo(_request: Request) -> Response:
+    def login_demo(request: Request) -> Response:
         if not c.settings.demo_login:
             raise HttpError(403, "demo_disabled", "La demostración no está disponible.")
-        return signed_in(c.auth.login_without_password(DEMO_EMAIL))
+        return signed_in(c.demo.start(client=request.client))
 
     @router.route("POST", "/api/auth/logout")
     def logout(request: Request) -> Response:
@@ -130,9 +129,10 @@ def build_router(c: Container) -> Router:
 
     @router.route("POST", "/api/demo/reset")
     def reset_demo(request: Request) -> Response:
-        if tenant(request) != c.settings.default_business_id:
-            raise HttpError(403, "not_demo", "Solo el negocio de demostración se puede reiniciar.")
-        c.reset_demo()
+        business_id = tenant(request)
+        if not c.business.get(business_id).is_demo:
+            raise HttpError(403, "not_demo", "Solo un negocio de demostración se puede reiniciar.")
+        c.demo.reset(business_id)
         return Response.json({"reset": True})
 
     # ------------------------------------------------------------ business & services

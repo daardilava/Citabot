@@ -130,13 +130,13 @@ class AuthService:
             self._sessions.delete_expired(now)
             return self._open_session(user)
 
-    def login_without_password(self, email: str) -> Session:
-        """Sign in as a known account. Only for the public demo account."""
-        user = self._users.find_by_email(_normalise(email))
-        if user is None:
-            raise AuthenticationError("La cuenta de demostración no está disponible.")
+    def start_session(self, user: User, expires_at: datetime | None = None) -> Session:
+        """Sign a known user in without a password. Only for demo accounts.
+
+        `expires_at` caps the session, so it never outlives its demo business.
+        """
         with self._uow:
-            return self._open_session(user)
+            return self._open_session(user, expires_at)
 
     def authenticate(self, token: str) -> User | None:
         """The user behind a session token, or None when it is unknown or expired."""
@@ -148,10 +148,10 @@ class AuthService:
 
     # ------------------------------------------------------------ helpers
 
-    def _open_session(self, user: User) -> Session:
+    def _open_session(self, user: User, cap: datetime | None = None) -> Session:
         now = self._clock.now()
         token = secrets.token_urlsafe(32)
-        expires_at = now + SESSION_TTL
+        expires_at = min(now + SESSION_TTL, cap) if cap else now + SESSION_TTL
         self._sessions.add(_digest(token), user.id, expires_at, now)
         return Session(token, user, expires_at)
 
