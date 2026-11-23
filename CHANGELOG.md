@@ -38,6 +38,9 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
 
 ### Corregido
 
+- Una petición rechazada antes de llegar a su ruta (escritura desde otro sitio, 404, 405) a veces
+  llegaba al navegador como error de red en vez de su respuesta, porque el servidor cerraba la
+  conexión sin leer el cuerpo.
 - **Seguridad**: el bloqueo por intentos fallidos se lleva por correo y dirección IP; antes
   cualquiera podía bloquear una cuenta ajena con cinco contraseñas erróneas. También se limitan
   los registros y las demos por IP.
