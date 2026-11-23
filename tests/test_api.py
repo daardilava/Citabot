@@ -27,6 +27,7 @@ class ApiTestCase(unittest.TestCase):
             build_router(self.c),
             self.c.settings.web_dir,
             trust_proxy=self.c.settings.trust_proxy,
+            https=self.c.settings.cookie_secure,
         )
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -186,6 +187,36 @@ class ApiTest(ApiTestCase):
         self.call("POST", "/api/simulator/messages", {"phone": "+57 1", "text": "Hola"})
         self.assertEqual(self.call("POST", "/api/demo/reset")[0], 200)
         self.assertEqual(len(self.call("GET", "/api/conversations")[1]), 3)
+
+
+class SecurityHeadersTest(ApiTestCase):
+    signed_in = False
+
+    def headers(self, path: str) -> Any:
+        with urllib.request.urlopen(self.base + path, timeout=5) as response:
+            return response.headers
+
+    def test_every_response_carries_the_security_headers(self) -> None:
+        for path in ("/", "/api/health"):
+            with self.subTest(path=path):
+                sent = self.headers(path)
+                policy = sent["Content-Security-Policy"]
+                for directive in ("default-src 'self'", "object-src 'none'", "base-uri 'none'"):
+                    self.assertIn(directive, policy)
+                self.assertEqual(sent["X-Frame-Options"], "DENY")
+                self.assertIsNone(sent["Strict-Transport-Security"])  # plain HTTP here
+
+    def test_health_does_not_reveal_the_configuration(self) -> None:
+        self.assertEqual(self.call("GET", "/api/health")[1], {"status": "ok", "demo_login": True})
+
+
+class HstsTest(ApiTestCase):
+    signed_in = False
+    settings_overrides: ClassVar[dict[str, object]] = {"cookie_secure": True}
+
+    def test_hsts_is_sent_when_served_over_https(self) -> None:
+        with urllib.request.urlopen(self.base + "/", timeout=5) as response:
+            self.assertIn("max-age=", response.headers["Strict-Transport-Security"])
 
 
 class WebhookTest(ApiTestCase):

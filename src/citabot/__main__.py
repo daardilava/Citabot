@@ -21,6 +21,7 @@ def main() -> None:
             build_router(container),
             settings.web_dir,
             trust_proxy=settings.trust_proxy,
+            https=settings.cookie_secure,
         )
     except OSError as error:
         container.db.close()

@@ -38,8 +38,13 @@ _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+    "Content-Security-Policy": (
+        "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    ),
 }
+# Sent only when the site is served over HTTPS: browsers then refuse plain HTTP for a year.
+_HSTS = "max-age=31536000; includeSubDomains"
 # Windows may map .js to text/plain in its registry; browsers then refuse ES modules.
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -50,8 +55,11 @@ _CONTENT_TYPES = {
 }
 
 
-def make_handler(router: Router, web_dir: Path, trust_proxy: bool = False) -> type[BaseHTTPRequestHandler]:
+def make_handler(
+    router: Router, web_dir: Path, trust_proxy: bool = False, https: bool = False
+) -> type[BaseHTTPRequestHandler]:
     web_root = web_dir.resolve()
+    security_headers = _SECURITY_HEADERS | ({"Strict-Transport-Security": _HSTS} if https else {})
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Citabot"
@@ -151,7 +159,7 @@ def make_handler(router: Router, web_dir: Path, trust_proxy: bool = False) -> ty
             self.send_header("Content-Length", str(len(response.body)))
             # no-cache = revalidate; keeps the panel fresh while you edit the files.
             self.send_header("Cache-Control", "no-cache" if cacheable else "no-store")
-            for name, value in (_SECURITY_HEADERS | response.headers).items():
+            for name, value in (security_headers | response.headers).items():
                 self.send_header(name, value)
             self.end_headers()
             self.wfile.write(response.body)
@@ -199,6 +207,8 @@ def create_server(
     web_dir: Path,
     max_connections: int = MAX_CONNECTIONS,
     trust_proxy: bool = False,
+    https: bool = False,
 ) -> ThreadingHTTPServer:
-    handler = make_handler(router, web_dir, trust_proxy)
+    """`https` says the site is served over TLS (usually by the proxy in front)."""
+    handler = make_handler(router, web_dir, trust_proxy, https)
     return BoundedThreadingHTTPServer((host, port), handler, max_connections)

@@ -45,6 +45,9 @@ Todos los cambios visibles de este proyecto se anotan aquí. El formato sigue
   y se atienden máximo 64 conexiones a la vez.
 - **Seguridad**: el webhook de WhatsApp rechaza todo (503) mientras falte `WHATSAPP_APP_SECRET`,
   también en modo simulador.
+- **Seguridad**: política de contenido más estricta (`object-src`, `base-uri`, `form-action`),
+  HSTS cuando el sitio se sirve por HTTPS (`CITABOT_COOKIE_SECURE=1`) y `/api/health` ya no
+  revela el proveedor de mensajería.
 - La conexión con la API de Anthropic usa solo IPv4, lo que evita esperas de unos 20 s en redes
   con IPv6 mal enrutado.
 

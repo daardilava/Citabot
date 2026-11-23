@@ -63,13 +63,8 @@ def build_router(c: Container) -> Router:
 
     @router.route("GET", "/api/health")
     def health(_request: Request) -> Response:
-        return Response.json(
-            {
-                "status": "ok",
-                "messaging_provider": c.settings.messaging_provider,
-                "demo_login": c.settings.demo_login,
-            }
-        )
+        # Public: only what the login page needs. Configuration stays private.
+        return Response.json({"status": "ok", "demo_login": c.settings.demo_login})
 
     # ------------------------------------------------------------ accounts
 
