@@ -35,10 +35,13 @@ pre-commit install              # opcional: revisa cada commit antes de crearlo
 ruff check .
 ruff format --check .
 mypy
-python -m unittest discover -s tests -t .
+coverage run -m unittest discover -s tests -t .
+coverage report                 # falla por debajo del 85 % de cobertura de ramas
 ```
 
-Son los mismos pasos que ejecuta la CI en Linux y Windows, con Python 3.10 y 3.13.
+Son los mismos pasos que ejecuta la CI en Linux y Windows, con Python 3.10 y 3.13. La CI también
+corre CodeQL y Gitleaks; si el *hook* de `pre-commit` está instalado, Gitleaks revisa cada commit
+antes de crearlo.
 
 ## Reglas del código
 

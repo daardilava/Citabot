@@ -5,3 +5,5 @@ data/*.db*
 .mypy_cache/
 .ruff_cache/
 .venv/
+.coverage
+htmlcov/

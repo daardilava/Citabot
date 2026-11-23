@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = []  # standard library only
 
 [project.optional-dependencies]
-dev = ["ruff==0.17.5", "mypy==2.4.1", "pre-commit"]
+dev = ["ruff==0.17.5", "mypy==2.4.1", "coverage[toml]==7.17.5", "pre-commit"]
 llm = ["anthropic"]  # only needed with NLU_PROVIDER=llm
 
 [tool.setuptools.packages.find]
@@ -24,6 +24,17 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "C4", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]  # Spanish text uses «», – and accents on purpose
+
+[tool.coverage.run]
+branch = true
+source = ["src/citabot"]
+omit = ["src/citabot/__main__.py"]  # the entry point only wires things together
+
+[tool.coverage.report]
+# CI fails below this. Raise it as coverage grows; never lower it to get a PR through.
+fail_under = 85
+show_missing = true
+skip_covered = true
 
 [tool.mypy]
 python_version = "3.10"

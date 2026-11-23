@@ -113,9 +113,9 @@ tests/               unittest: dominio, intérprete, agente y API de punta a pun
 python -m unittest discover -s tests -t .
 ```
 
-63 pruebas: reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. 
+Las pruebas cubren reglas de agenda, intérprete de español, adaptadores del LLM (con un cliente falso), entrada de mensajes (duplicados, concurrencia, migración), flujos completos del agente y la API HTTP con un servidor real en un puerto libre. La CI exige al menos 85 % de cobertura de ramas.
 
-La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff` y `mypy --strict`. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
+La integración continua ejecuta estas pruebas en Linux y Windows con Python 3.10 y 3.13, además de `ruff`, `mypy --strict`, CodeQL y Gitleaks. El flujo de ramas, el formato de commits y cómo preparar el entorno están en [CONTRIBUTING.md](CONTRIBUTING.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
 ## Entender los mensajes con un LLM
 

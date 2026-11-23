@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import threading
@@ -53,6 +54,42 @@ class StalledClientTest(unittest.TestCase):
         with urllib.request.urlopen(base + "/api/health", timeout=5) as response:
             self.assertEqual(json.loads(response.read())["status"], "ok")
         self.assertGreater(time.monotonic() - started, 0.3)  # it waited for the slot
+
+
+class RejectedRequestTest(unittest.TestCase):
+    """A request refused before its handler runs still gets its error response.
+
+    Closing a socket with unread data makes the OS reset the connection, which
+    can discard the response before the client reads it. The server has to
+    read the body even when it is about to refuse the request.
+    """
+
+    def test_the_403_for_a_cross_site_write_always_arrives(self) -> None:
+        c = support.make_container()
+        server = http_server.create_server("127.0.0.1", 0, build_router(c), c.settings.web_dir)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(c.close)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        body = b"x" * 256_000
+        head = (
+            "POST /api/auth/login HTTP/1.1\r\n"
+            "Host: 127.0.0.1\r\n"
+            "Origin: https://evil.example\r\n"
+            f"Content-Length: {len(body)}\r\n\r\n"
+        )
+        for attempt in range(30):
+            with self.subTest(attempt=attempt), socket.create_connection(server.server_address) as sock:
+                sock.settimeout(5)
+                # Like urllib: headers first, body a moment later, after the server
+                # may already have answered.
+                sock.sendall(head.encode())
+                time.sleep(0.02)
+                with contextlib.suppress(OSError):  # the server may have closed already
+                    sock.sendall(body)
+                status_line = sock.recv(4096).split(b"\r\n", 1)[0]
+                self.assertIn(b" 403 ", status_line)
 
 
 if __name__ == "__main__":
