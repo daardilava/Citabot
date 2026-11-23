@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from citabot.domain.errors import (
@@ -22,6 +24,8 @@ from .framework import HttpError, Request, Response, Router
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 1_000_000
+REQUEST_TIMEOUT_SECONDS = 30
+MAX_CONNECTIONS = 64
 _STATUS_BY_ERROR: dict[type[DomainError], tuple[int, str]] = {
     ValidationError: (400, "validation_error"),
     NotFoundError: (404, "not_found"),
@@ -51,6 +55,9 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Citabot"
+        # Socket timeout: a client that stops sending (or never sends the body it
+        # announced) is dropped instead of holding a worker thread forever.
+        timeout = REQUEST_TIMEOUT_SECONDS
 
         def do_GET(self) -> None:
             self._handle()
@@ -70,6 +77,9 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
             except DomainError as exc:
                 status, code = _STATUS_BY_ERROR.get(type(exc), (400, "domain_error"))
                 response = Response.error(status, code, str(exc))
+            except TimeoutError:  # the body never arrived in full
+                self.close_connection = True
+                response = Response.error(408, "request_timeout", "La petición tardó demasiado.")
             except Exception:  # last line of defence; details stay in the log
                 logger.exception("Error no controlado en %s %s", self.command, url.path)
                 response = Response.error(500, "internal_error", "Error interno del servidor.")
@@ -138,7 +148,40 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def create_server(host: str, port: int, router: Router, web_dir: Path) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), make_handler(router, web_dir))
-    server.daemon_threads = True
-    return server
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """One thread per connection, but never more than `max_connections` at once.
+
+    When every slot is busy the accept loop waits, and new connections queue in
+    the kernel's backlog instead of spawning threads without limit.
+    """
+
+    daemon_threads = True
+
+    def __init__(
+        self,
+        address: tuple[str, int],
+        handler: type[BaseHTTPRequestHandler],
+        max_connections: int = MAX_CONNECTIONS,
+    ) -> None:
+        super().__init__(address, handler)
+        self._slots = threading.BoundedSemaphore(max_connections)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        self._slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
+def create_server(
+    host: str, port: int, router: Router, web_dir: Path, max_connections: int = MAX_CONNECTIONS
+) -> ThreadingHTTPServer:
+    return BoundedThreadingHTTPServer((host, port), make_handler(router, web_dir), max_connections)
