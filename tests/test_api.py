@@ -237,5 +237,16 @@ class WebhookTest(ApiTestCase):
         self.assertEqual(status, 401)
 
 
+class WebhookWithoutSecretTest(ApiTestCase):
+    signed_in = False
+
+    def test_webhook_stays_closed_without_an_app_secret(self) -> None:
+        # Even in simulator mode: otherwise anyone could post messages to the agent.
+        status, data = self.call("POST", "/webhooks/whatsapp", WebhookTest.PAYLOAD)
+        self.assertEqual((status, data["error"]["code"]), (503, "not_configured"))
+        phones = {x.contact.phone for x in self.c.inbox.list(self.c.settings.default_business_id)}
+        self.assertNotIn("+573001112233", phones)
+
+
 if __name__ == "__main__":
     unittest.main()

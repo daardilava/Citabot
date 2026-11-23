@@ -332,13 +332,14 @@ def build_router(c: Container) -> Router:
 
     @router.route("POST", "/webhooks/whatsapp")
     def receive_webhook(request: Request) -> Response:
+        # Only Meta may post here. Without the app secret there is no way to tell
+        # Meta from anyone else, so the endpoint stays closed (the simulator does
+        # not need it: it has its own route behind the session).
         secret = c.settings.whatsapp_app_secret
-        if secret:
-            if not signature_is_valid(secret, request.body, request.headers.get("x-hub-signature-256")):
-                raise HttpError(401, "invalid_signature", "Firma inválida.")
-        elif c.settings.messaging_provider == "whatsapp_cloud":
-            # Never accept unsigned webhooks once real messages are flowing.
+        if not secret:
             raise HttpError(503, "not_configured", "Falta WHATSAPP_APP_SECRET.")
+        if not signature_is_valid(secret, request.body, request.headers.get("x-hub-signature-256")):
+            raise HttpError(401, "invalid_signature", "Firma inválida.")
         # Store each message now and answer it in the background: Meta redelivers
         # a webhook that is not acknowledged within a few seconds, and a reply
         # that waits for a language model can take longer than that.
