@@ -52,6 +52,7 @@ _CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml",
     ".json": "application/json; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
 }
 
 
