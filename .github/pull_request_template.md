@@ -1,15 +1,15 @@
-## Qué cambia
+## What changes
 
-<!-- Una o dos frases: qué hace este cambio y por qué. -->
+<!-- One or two sentences: what this change does and why. -->
 
-## Cómo se probó
+## How it was tested
 
-<!-- Pruebas nuevas o modificadas, y cualquier verificación manual (simulador, API real). -->
+<!-- New or changed tests, and any manual checks (simulator, real API). -->
 
-## Lista de comprobación
+## Checklist
 
-- [ ] `ruff check .` y `ruff format --check .` pasan
-- [ ] `mypy` pasa
-- [ ] `python -m unittest discover -s tests -t .` pasa
-- [ ] README y CHANGELOG actualizados si cambia el comportamiento o la configuración
-- [ ] Sin secretos ni datos reales de clientes en el diff
+- [ ] `ruff check .` and `ruff format --check .` pass
+- [ ] `mypy` passes
+- [ ] `python -m unittest discover -s tests -t .` passes
+- [ ] README and CHANGELOG updated if behavior or configuration changes
+- [ ] No secrets or real customer data in the diff
