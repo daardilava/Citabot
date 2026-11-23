@@ -31,6 +31,8 @@ class Request:
     headers: Mapping[str, str]
     body: bytes
     params: dict[str, int] = field(default_factory=dict)
+    # Who is calling (an IP address), for rate limiting. Empty when unknown.
+    client: str = ""
 
     def cookie(self, name: str) -> str | None:
         jar = SimpleCookie()

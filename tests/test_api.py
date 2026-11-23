@@ -21,7 +21,13 @@ class ApiTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.c = support.make_container(**self.settings_overrides)
-        self.server = create_server("127.0.0.1", 0, build_router(self.c), self.c.settings.web_dir)
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            build_router(self.c),
+            self.c.settings.web_dir,
+            trust_proxy=self.c.settings.trust_proxy,
+        )
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.addCleanup(self.c.close)

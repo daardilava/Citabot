@@ -50,7 +50,7 @@ _CONTENT_TYPES = {
 }
 
 
-def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
+def make_handler(router: Router, web_dir: Path, trust_proxy: bool = False) -> type[BaseHTTPRequestHandler]:
     web_root = web_dir.resolve()
 
     class Handler(BaseHTTPRequestHandler):
@@ -111,8 +111,19 @@ def make_handler(router: Router, web_dir: Path) -> type[BaseHTTPRequestHandler]:
                 headers={k.lower(): v for k, v in self.headers.items()},
                 body=self.rfile.read(length) if length > 0 else b"",
                 params=params,
+                client=self._client(),
             )
             return handler(request)
+
+        def _client(self) -> str:
+            """The caller's IP. Behind a reverse proxy the socket only shows the proxy,
+            so with `trust_proxy` the last X-Forwarded-For entry (the one our proxy
+            appended) is used instead. Never trust that header without a proxy:
+            any client can send it."""
+            forwarded = self.headers.get("X-Forwarded-For") if trust_proxy else None
+            if forwarded:
+                return forwarded.rsplit(",", 1)[-1].strip()
+            return str(self.client_address[0])
 
         def _static(self, path: str) -> Response:
             if self.command != "GET":
@@ -182,6 +193,12 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 
 def create_server(
-    host: str, port: int, router: Router, web_dir: Path, max_connections: int = MAX_CONNECTIONS
+    host: str,
+    port: int,
+    router: Router,
+    web_dir: Path,
+    max_connections: int = MAX_CONNECTIONS,
+    trust_proxy: bool = False,
 ) -> ThreadingHTTPServer:
-    return BoundedThreadingHTTPServer((host, port), make_handler(router, web_dir), max_connections)
+    handler = make_handler(router, web_dir, trust_proxy)
+    return BoundedThreadingHTTPServer((host, port), handler, max_connections)

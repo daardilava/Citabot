@@ -6,7 +6,12 @@ import unittest
 from datetime import timedelta
 from typing import ClassVar
 
-from citabot.application.auth import MAX_FAILED_LOGINS, SESSION_TTL
+from citabot.application.auth import (
+    MAX_FAILED_LOGINS,
+    MAX_FAILED_LOGINS_PER_CLIENT,
+    MAX_SIGNUPS_PER_CLIENT,
+    SESSION_TTL,
+)
 from citabot.domain.errors import AuthenticationError, RateLimitedError, ValidationError
 from citabot.infrastructure.clock import FixedClock
 from citabot.infrastructure.security import UNUSABLE_PASSWORD, ScryptHasher
@@ -97,16 +102,40 @@ class AuthServiceTest(unittest.TestCase):
             messages.add(str(caught.exception))
         self.assertEqual(len(messages), 1)
 
-    def test_repeated_failures_lock_the_email_for_a_while(self) -> None:
-        self.register()
-        for _ in range(MAX_FAILED_LOGINS):
+    def fail(self, email: str, client: str, times: int) -> None:
+        for _ in range(times):
             with self.assertRaises(AuthenticationError):
-                self.c.auth.login("marta@example.com", "otra-clave")
+                self.c.auth.login(email, "otra-clave", client=client)
+
+    def test_repeated_failures_lock_the_email_for_that_client_for_a_while(self) -> None:
+        self.register()
+        self.fail("marta@example.com", "10.0.0.9", MAX_FAILED_LOGINS)
         with self.assertRaises(RateLimitedError):
-            self.c.auth.login("marta@example.com", "una-clave-larga")  # even the right one
+            self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9")  # even the right one
 
         self.clock.moment = support.NOW + timedelta(minutes=16)
-        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga").token)
+        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9").token)
+
+    def test_a_stranger_cannot_lock_the_owner_out(self) -> None:
+        self.register()
+        self.fail("marta@example.com", "10.0.0.9", MAX_FAILED_LOGINS)
+        session = self.c.auth.login("marta@example.com", "una-clave-larga", client="192.168.1.20")
+        self.assertTrue(session.token)
+
+    def test_a_client_spraying_many_emails_is_stopped(self) -> None:
+        self.register()
+        for i in range(MAX_FAILED_LOGINS_PER_CLIENT):
+            self.fail(f"persona{i}@example.com", "10.0.0.9", 1)
+        with self.assertRaises(RateLimitedError):
+            self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.9")
+        self.assertTrue(self.c.auth.login("marta@example.com", "una-clave-larga", client="10.0.0.1").token)
+
+    def test_signups_per_client_are_limited(self) -> None:
+        for i in range(MAX_SIGNUPS_PER_CLIENT):
+            self.c.auth.register(**(SIGNUP | {"email": f"dueno{i}@example.com"}), client="10.0.0.9")
+        with self.assertRaises(RateLimitedError):
+            self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.9")
+        self.c.auth.register(**(SIGNUP | {"email": "otro@example.com"}), client="10.0.0.1")
 
     def test_the_demo_account_has_no_password(self) -> None:
         for password in ("", UNUSABLE_PASSWORD, "demo"):
@@ -201,6 +230,37 @@ class DemoDisabledTest(ApiTestCase):
     def test_demo_sign_in_can_be_turned_off(self) -> None:
         self.assertFalse(self.call("GET", "/api/health")[1]["demo_login"])
         self.assertEqual(self.call("POST", "/api/auth/demo")[0], 403)
+
+
+class ClientAddressCase(ApiTestCase):
+    """Login limits follow the client's address; X-Forwarded-For only counts behind a proxy."""
+
+    signed_in = False
+
+    def lock_from(self, forwarded_for: str) -> None:
+        self.call("POST", "/api/auth/signup", SIGNUP)
+        wrong = {"email": SIGNUP["email"], "password": "otra-clave"}
+        for _ in range(MAX_FAILED_LOGINS):
+            self.call("POST", "/api/auth/login", wrong, {"X-Forwarded-For": forwarded_for})
+
+    def login_from(self, forwarded_for: str) -> int:
+        right = {"email": SIGNUP["email"], "password": SIGNUP["password"]}
+        return self.call("POST", "/api/auth/login", right, {"X-Forwarded-For": forwarded_for})[0]
+
+
+class ClientAddressTest(ClientAddressCase):
+    def test_the_header_is_ignored_without_a_proxy(self) -> None:
+        self.lock_from("10.0.0.9")
+        self.assertEqual(self.login_from("10.0.0.1"), 429)  # same socket address: still locked
+
+
+class ClientAddressBehindProxyTest(ClientAddressCase):
+    settings_overrides: ClassVar[dict[str, object]] = {"trust_proxy": True}
+
+    def test_the_header_identifies_the_client(self) -> None:
+        self.lock_from("10.0.0.9")
+        self.assertEqual(self.login_from("10.0.0.9"), 429)
+        self.assertEqual(self.login_from("203.0.113.5, 10.0.0.1"), 200)  # last entry is the client
 
 
 if __name__ == "__main__":

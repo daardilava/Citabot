@@ -15,7 +15,13 @@ def main() -> None:
     settings = Settings.from_env()
     container = build_container(settings)
     try:
-        server = create_server(settings.host, settings.port, build_router(container), settings.web_dir)
+        server = create_server(
+            settings.host,
+            settings.port,
+            build_router(container),
+            settings.web_dir,
+            trust_proxy=settings.trust_proxy,
+        )
     except OSError as error:
         container.db.close()
         raise SystemExit(

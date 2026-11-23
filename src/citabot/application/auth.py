@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-import threading
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
@@ -20,15 +19,23 @@ from .ports import (
     UnitOfWork,
     UserRepository,
 )
+from .rate_limit import SlidingWindowLimiter
 
 SESSION_TTL = timedelta(days=14)
 MIN_PASSWORD_CHARS = 8
 MAX_PASSWORD_CHARS = 200
 MAX_NAME_CHARS = 80
 MAX_EMAIL_CHARS = 254
-# After this many wrong passwords for one email, sign-in is refused for the window.
+# After this many wrong passwords for one email from one client, that pair is
+# refused for the window. Keyed by both so a stranger cannot lock you out.
 MAX_FAILED_LOGINS = 5
+# A client that fails this often across any emails is refused too (password spraying).
+MAX_FAILED_LOGINS_PER_CLIENT = 20
 FAILED_LOGIN_WINDOW = timedelta(minutes=15)
+# New accounts a single client may create per window.
+MAX_SIGNUPS_PER_CLIENT = 5
+SIGNUP_WINDOW = timedelta(hours=1)
+_TOO_MANY_ATTEMPTS = "Demasiados intentos. Espera unos minutos y vuelve a probar."
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _BAD_CREDENTIALS = "El correo o la contraseña no son correctos."
@@ -58,12 +65,18 @@ class AuthService:
         self._businesses = businesses
         self._hasher = hasher
         self._clock = clock
-        self._failures: dict[str, list[datetime]] = {}
-        self._failures_guard = threading.Lock()
+        self._pair_failures = SlidingWindowLimiter(MAX_FAILED_LOGINS, FAILED_LOGIN_WINDOW)
+        self._client_failures = SlidingWindowLimiter(MAX_FAILED_LOGINS_PER_CLIENT, FAILED_LOGIN_WINDOW)
+        self._signups = SlidingWindowLimiter(MAX_SIGNUPS_PER_CLIENT, SIGNUP_WINDOW)
         self._decoy_hash: str | None = None
 
-    def register(self, business_name: str, name: str, email: str, password: str) -> Session:
-        """Create a business with its first user and sign them in."""
+    def register(self, business_name: str, name: str, email: str, password: str, client: str = "") -> Session:
+        """Create a business with its first user and sign them in.
+
+        `client` identifies the caller (its IP address) for rate limiting.
+        """
+        if self._signups.is_limited(client, self._clock.now()):
+            raise RateLimitedError(_TOO_MANY_ATTEMPTS)
         business_name, name, email = business_name.strip(), name.strip(), _normalise(email)
         if not business_name or len(business_name) > MAX_NAME_CHARS:
             raise ValidationError(
@@ -91,23 +104,28 @@ class AuthService:
                 hours={weekday: [TimeRange(time(9), time(18))] for weekday in range(5)},
             )
             user = self._users.add(business.id, email, name, password_hash, self._clock.now())
-            return self._open_session(user)
+            session = self._open_session(user)
+        self._signups.hit(client, self._clock.now())
+        return session
 
-    def login(self, email: str, password: str) -> Session:
+    def login(self, email: str, password: str, client: str = "") -> Session:
+        """`client` identifies the caller (its IP address) for rate limiting."""
         email = _normalise(email)
         now = self._clock.now()
-        if self._is_locked(email, now):
-            raise RateLimitedError("Demasiados intentos. Espera unos minutos y vuelve a probar.")
+        pair = (email, client)
+        if self._pair_failures.is_limited(pair, now) or self._client_failures.is_limited(client, now):
+            raise RateLimitedError(_TOO_MANY_ATTEMPTS)
 
         user = self._users.find_by_email(email)
         # Verify against a decoy when the account does not exist, so the response
         # takes as long and says the same as for a wrong password.
         stored = user.password_hash if user else self._decoy()
         if not self._hasher.verify(password, stored) or user is None:
-            self._record_failure(email, now)
+            self._pair_failures.hit(pair, now)
+            self._client_failures.hit(client, now)
             raise AuthenticationError(_BAD_CREDENTIALS)
 
-        self._clear_failures(email)
+        self._pair_failures.reset(pair)
         with self._uow:
             self._sessions.delete_expired(now)
             return self._open_session(user)
@@ -141,23 +159,6 @@ class AuthService:
         if self._decoy_hash is None:
             self._decoy_hash = self._hasher.hash(secrets.token_urlsafe(16))
         return self._decoy_hash
-
-    def _is_locked(self, email: str, now: datetime) -> bool:
-        with self._failures_guard:
-            recent = [t for t in self._failures.get(email, []) if now - t < FAILED_LOGIN_WINDOW]
-            if recent:
-                self._failures[email] = recent
-            else:
-                self._failures.pop(email, None)
-            return len(recent) >= MAX_FAILED_LOGINS
-
-    def _record_failure(self, email: str, now: datetime) -> None:
-        with self._failures_guard:
-            self._failures.setdefault(email, []).append(now)
-
-    def _clear_failures(self, email: str) -> None:
-        with self._failures_guard:
-            self._failures.pop(email, None)
 
 
 def _normalise(email: str) -> str:

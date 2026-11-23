@@ -82,13 +82,15 @@ def build_router(c: Container) -> Router:
             name=s.text_field(body, "name"),
             email=s.text_field(body, "email"),
             password=s.text_field(body, "password"),
+            client=request.client,
         )
         return signed_in(session, 201)
 
     @router.route("POST", "/api/auth/login")
     def login(request: Request) -> Response:
         body = request.json()
-        return signed_in(c.auth.login(s.text_field(body, "email"), s.text_field(body, "password")))
+        email, password = s.text_field(body, "email"), s.text_field(body, "password")
+        return signed_in(c.auth.login(email, password, client=request.client))
 
     @router.route("POST", "/api/auth/demo")
     def login_demo(_request: Request) -> Response:
